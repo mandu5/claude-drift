@@ -226,6 +226,38 @@ def test_cli_replay_estimate_matches_sampled_cuts(
     assert printed_n == len(lr.read_cuts())
 
 
+def test_cli_replay_per_session_option(
+    projects_dir: Path, drift_home: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import claude_drift.cli as cli
+
+    pretend_claude_installed(monkeypatch)
+    monkeypatch.setattr(cli, "SubprocessRunner", ScriptedRunner)
+    result = CliRunner().invoke(
+        main,
+        [
+            "replay",
+            "--from",
+            "opus-5",
+            "--to",
+            "new",
+            "--turns",
+            "60",
+            "--per-session",
+            "1",
+            "--yes",
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    lr = latest_run()
+    assert lr is not None
+    cuts = lr.read_cuts()
+    # fixtures alpha and beta each have replayable claude-opus-5 cuts; capped at 1 per session
+    assert len({c.session_id for c in cuts}) == 2
+    assert len(cuts) == 2
+    assert lr.read_manifest()["per_session"] == 1
+
+
 def test_cli_replay_ambiguous_from(
     projects_dir: Path, drift_home: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

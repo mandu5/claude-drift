@@ -38,6 +38,7 @@ Example output: see [docs/examples/first-report.md](docs/examples/first-report.m
 | option | default | what it does |
 |---|---|---|
 | `--turns N` | 60 | How many recorded turns to sample and replay. |
+| `--per-session N` | 3 | Max cuts sampled from one session. |
 | `--workers N` | 4 | Replays in flight at once. Sessions are batched so one worker owns a session. |
 | `--no-noise` | off | Skip the old-model replay. Faster and half the cost, but no noise band and no verdict. |
 | `--project PATH` | all | Only replay sessions whose working directory is under `PATH`. Also on `drift scan`. |

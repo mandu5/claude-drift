@@ -95,12 +95,18 @@ def run_replay(
     timeout: float,
     runner: Runner,
     echo: Callable[[str], None],
+    per_session: int = 3,
 ) -> Run:
     all_cuts = ingest(projects_root(), project=project)
     if not all_cuts:
         raise click.ClickException("no replayable cuts found; run `drift scan`")
     resolved_from = resolve_from_model(all_cuts, from_model)
-    cuts = sample_cuts([c for c in all_cuts if c.model == resolved_from], turns=turns, seed=seed)
+    cuts = sample_cuts(
+        [c for c in all_cuts if c.model == resolved_from],
+        turns=turns,
+        seed=seed,
+        per_session=per_session,
+    )
     if not cuts:
         raise click.ClickException(f"no cuts recorded with model {resolved_from}")
     run = new_run(datetime.now())
@@ -113,6 +119,7 @@ def run_replay(
         "workers": workers,
         "noise": noise,
         "timeout": timeout,
+        "per_session": per_session,
         "claude_version": claude_version(),
         "started": datetime.now().isoformat(),
         "status": "running",
@@ -191,6 +198,14 @@ def run_replay(
     help="Model to replay with, passed to `claude --model`.",
 )
 @click.option("--turns", default=60, show_default=True, type=int)
+@click.option(
+    "--per-session",
+    "per_session",
+    default=3,
+    show_default=True,
+    type=int,
+    help="Max cuts sampled from one session.",
+)
 @click.option("--workers", default=4, show_default=True, type=int)
 @click.option(
     "--no-noise",
@@ -212,6 +227,7 @@ def replay(
     from_model: str,
     to_model: str,
     turns: int,
+    per_session: int,
     workers: int,
     no_noise: bool,
     project: str | None,
@@ -232,7 +248,14 @@ def replay(
     if not all_cuts:
         raise click.ClickException("no replayable cuts found; run `drift scan`")
     resolved = resolve_from_model(all_cuts, from_model)
-    n = len(sample_cuts([c for c in all_cuts if c.model == resolved], turns=turns, seed=seed))
+    n = len(
+        sample_cuts(
+            [c for c in all_cuts if c.model == resolved],
+            turns=turns,
+            seed=seed,
+            per_session=per_session,
+        )
+    )
     est = n * (2 if noise else 1) * TOKENS_PER_CUT_ESTIMATE
     click.echo(f"cuts: {n}  replays: {n * (2 if noise else 1)}  estimated input tokens: {est:,}")
     if not yes:
@@ -248,6 +271,7 @@ def replay(
         timeout=timeout,
         runner=SubprocessRunner(),
         echo=click.echo,
+        per_session=per_session,
     )
     m = run.read_manifest()
     click.echo(
