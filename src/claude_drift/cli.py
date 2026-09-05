@@ -13,8 +13,9 @@ from claude_drift import __version__
 from claude_drift.ingest import ingest, projects_root
 from claude_drift.models import CutPoint, ReplayResult
 from claude_drift.replay import Runner, SubprocessRunner, replay_cut
+from claude_drift.report import build_report
 from claude_drift.sample import batch_by_session, sample_cuts
-from claude_drift.store import Run, new_run
+from claude_drift.store import Run, get_run, latest_run, new_run
 
 
 @click.group()
@@ -236,5 +237,28 @@ def replay(
     m = run.read_manifest()
     click.echo(f"status: {m['status']}  completed: {m['completed']}  errors: {m['errors']}")
     click.echo(f"run id: {run.path.name}")
+    click.echo()
+    click.echo(build_report(run), nl=False)
     if m["status"] == "aborted":
         raise click.exceptions.Exit(1)
+
+
+@main.command()
+@click.option(
+    "--run",
+    "run_id",
+    default=None,
+    help="Run id (folder name under ~/.claude-drift/runs). Default: latest.",
+)
+@click.option(
+    "--format", "fmt", type=click.Choice(["text", "md"]), default="text", show_default=True
+)
+def report(run_id: str | None, fmt: str) -> None:
+    """Render the drift report from a stored run. Makes no model calls."""
+    try:
+        run = get_run(run_id) if run_id else latest_run()
+    except FileNotFoundError as exc:
+        raise click.ClickException(str(exc)) from exc
+    if run is None:
+        raise click.ClickException("no runs yet; run `drift replay` first")
+    click.echo(build_report(run, fmt=fmt), nl=False)

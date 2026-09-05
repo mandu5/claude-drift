@@ -78,7 +78,15 @@ class Run:
 
 def new_run(now: datetime | None = None) -> Run:
     stamp = (now or datetime.now()).strftime("%Y%m%d-%H%M%S")
-    path = runs_root() / stamp
+    root = runs_root()
+    path = root / stamp
+    if path.exists():
+        # Second-resolution stamps can collide when two runs start within the same
+        # second; disambiguate instead of silently merging into the same directory.
+        n = 2
+        while (root / f"{stamp}-{n}").exists():
+            n += 1
+        path = root / f"{stamp}-{n}"
     path.mkdir(parents=True, exist_ok=True)
     return Run(path)
 
