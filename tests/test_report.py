@@ -29,6 +29,9 @@ def stats_fixture() -> DriftStats:
             Transition(
                 "Bash/local-read", "Grep/local-read", 3, 2, 1, Interval(-2, 4), False, False
             ),
+            Transition(
+                "Read/local-read", "Bash/local-read", 2, 8, -6, Interval(-9, -3), True, False
+            ),
         ],
         errors=1,
     )
@@ -39,18 +42,29 @@ def test_render_text() -> None:
     assert "model-drift report  opus-5 -> fable-5.1" in out
     assert "sessions replayed: 30   turns sampled: 60   errors: 1" in out
     assert "next-action agreement: 81%  (noise band 76%-88%)" in out
-    assert "REAL changes (outside noise band, Bonferroni-corrected over 3 transitions)" in out
-    assert "1. Bash/local-read -> Read/local-read" in out and "+23 turns" in out
-    assert "2. Write/local-write -> Read/local-read" in out and "!!" in out
+    assert "old-vs-old agreement: 83%" in out
+    assert "verdict: no detectable drift (candidate agreement inside noise band)" in out
+    assert "agreement by level: tool 0% / target 81% / full 0%" in out
+    assert (
+        "REAL changes (outside noise band, Bonferroni-corrected over 4 transitions, "
+        "alpha=0.05/4)" in out
+    )
+    assert "1. Bash/local-read -> Read/local-read" in out and "+21 turns" in out
+    assert "2. Write/local-write -> Read/local-read" in out and "+7 turns" in out and "!!" in out
     assert "NOISE (within band, ignore)" in out
-    assert "- Bash/local-read -> Grep/local-read" in out
+    assert "- Bash/local-read -> Grep/local-read" in out and "+1 turns" in out
     assert out.index("REAL") < out.index("NOISE")
+    # a negative delta keeps its sign and is still a REAL change
+    assert "3. Read/local-read -> Bash/local-read" in out and "-6 turns" in out
+    assert out.index("REAL") < out.index("-6 turns") < out.index("NOISE")
 
 
 def test_render_md_has_table_and_ci() -> None:
     out = render(stats_fixture(), {"from": "a", "to": "b"}, fmt="md")
     assert out.startswith("# model-drift report")
-    assert "| # | transition | candidate turns | noise turns | delta 95% CI | flag |" in out
+    assert (
+        "| # | transition | candidate turns | noise turns | delta CI (alpha=0.05/k) | flag |" in out
+    )
     assert "| 1 | Bash/local-read -> Read/local-read | 23 | 2 | 21 [15, 27] |  |" in out
     assert "| 2 | Write/local-write -> Read/local-read | 7 | 0 | 7 [3, 11] | !! |" in out
 
@@ -59,6 +73,8 @@ def test_render_without_noise_and_empty() -> None:
     s = DriftStats(5, 2, 1.0, None, None, [], 0)
     out = render(s, {"from": "a", "to": "b"})
     assert "(noise band not measured)" in out
+    assert "old-vs-old agreement: not measured" in out
+    assert "verdict: not measured (run without --no-noise to get a verdict)" in out
     assert "(none)" in out
 
 

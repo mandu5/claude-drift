@@ -23,24 +23,46 @@ def _ci(t: Transition) -> str:
 
 
 def _real_heading(k: int) -> str:
-    return f"REAL changes (outside noise band, Bonferroni-corrected over {k} transitions)"
+    return (
+        f"REAL changes (outside noise band, Bonferroni-corrected over {k} transitions, "
+        f"alpha=0.05/{k})"
+    )
+
+
+def _verdict(stats: DriftStats) -> str:
+    band = stats.noise_band
+    if band is None:
+        return "not measured (run without --no-noise to get a verdict)"
+    if band.low <= stats.candidate_agreement <= band.high:
+        return "no detectable drift (candidate agreement inside noise band)"
+    if stats.candidate_agreement < band.low:
+        return "drift detected (candidate agreement below noise band)"
+    return "candidate agrees MORE than old model with itself (above noise band)"
 
 
 def _header_lines(stats: DriftStats) -> list[str]:
+    noise = (
+        "not measured" if stats.noise_agreement is None else _pct(stats.noise_agreement)
+    )
     return [
         f"sessions replayed: {stats.sessions}   turns sampled: {stats.cuts}   "
         f"errors: {stats.errors}   skipped: {stats.skipped}",
         f"next-action agreement: {_pct(stats.candidate_agreement)}  {_band(stats.noise_band)}",
+        f"old-vs-old agreement: {noise}",
+        f"verdict: {_verdict(stats)}",
+        f"agreement by level: tool {_pct(stats.candidate_agreement_tool)} / "
+        f"target {_pct(stats.candidate_agreement)} / "
+        f"full {_pct(stats.candidate_agreement_full)}",
     ]
 
 
 def _text_real_row(i: int, t: Transition) -> str:
     flag = "  !!" if t.flagged else ""
-    return f"  {i}. {t.src} -> {t.dst}    +{t.candidate_count} turns{flag}"
+    return f"  {i}. {t.src} -> {t.dst}    {t.delta:+d} turns{flag}"
 
 
 def _text_noise_row(t: Transition) -> str:
-    return f"  - {t.src} -> {t.dst}    +{t.candidate_count} turns"
+    return f"  - {t.src} -> {t.dst}    {t.delta:+d} turns"
 
 
 def _md_row(i: int, t: Transition) -> str:
@@ -52,7 +74,9 @@ def _md_row(i: int, t: Transition) -> str:
 
 
 def _md_table(rows: list[Transition]) -> list[str]:
-    header = "| # | transition | candidate turns | noise turns | delta 95% CI | flag |"
+    header = (
+        "| # | transition | candidate turns | noise turns | delta CI (alpha=0.05/k) | flag |"
+    )
     sep = "|---|---|---|---|---|---|"
     return [header, sep] + [_md_row(i, t) for i, t in enumerate(rows, 1)]
 

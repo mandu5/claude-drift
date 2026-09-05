@@ -41,6 +41,8 @@ class DriftStats:
     transitions: list[Transition]
     errors: int
     skipped: int = 0
+    candidate_agreement_tool: float = 0.0
+    candidate_agreement_full: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -102,13 +104,13 @@ def _rows(
     return rows, errors, skipped, noise_on
 
 
-def _agreement(rows: list[_Row], which: str) -> float:
+def _agreement(rows: list[_Row], which: str, level: str = "target") -> float:
     if not rows:
         return 0.0
     hits = sum(
         1
         for r in rows
-        if agree(r.recorded, r.candidate if which == "candidate" else r.noise or r.recorded)
+        if agree(r.recorded, r.candidate if which == "candidate" else r.noise or r.recorded, level)
     )
     return hits / len(rows)
 
@@ -166,4 +168,6 @@ def compute(
         transitions=transitions,
         errors=errors,
         skipped=skipped,
+        candidate_agreement_tool=_agreement(rows, "candidate", "tool"),
+        candidate_agreement_full=_agreement(rows, "candidate", "full"),
     )

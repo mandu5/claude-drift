@@ -2,14 +2,17 @@
 
 sessions replayed: 5   turns sampled: 12   errors: 0   skipped: 0
 next-action agreement: 17%  (noise band 8%-50%)
+old-vs-old agreement: 25%
+verdict: no detectable drift (candidate agreement inside noise band)
+agreement by level: tool 33% / target 17% / full 17%
 
-## REAL changes (outside noise band, Bonferroni-corrected over 10 transitions)
+## REAL changes (outside noise band, Bonferroni-corrected over 10 transitions, alpha=0.05/10)
 
 (none)
 
 ## NOISE (within band, ignore)
 
-| # | transition | candidate turns | noise turns | delta 95% CI | flag |
+| # | transition | candidate turns | noise turns | delta CI (alpha=0.05/k) | flag |
 |---|---|---|---|---|---|
 | 1 | Bash/local-read -> text | 1 | 1 | 0 [0, 0] |  |
 | 2 | Bash/local-write -> Bash/local-read | 1 | 0 | 1 [0, 4] | !! |

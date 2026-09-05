@@ -36,7 +36,19 @@ def test_perfect_agreement_no_transitions() -> None:
     assert s.cuts == 20 and s.sessions == 5
     assert s.candidate_agreement == 1.0 and s.noise_agreement == 1.0
     assert s.noise_band == Interval(1.0, 1.0)
+    assert s.candidate_agreement_tool == 1.0 and s.candidate_agreement_full == 1.0
     assert s.transitions == [] and s.errors == 0
+
+
+def test_agreement_levels_split_tool_from_target() -> None:
+    # recorded Bash/local-read vs candidate Bash/remote: same tool, different target
+    bash_remote = ActionSignature("Bash", "remote", None, False)
+    cuts = [cut(i) for i in range(10)]
+    replays = [rep(i, "candidate", bash_remote) for i in range(10)]
+    s = compute(cuts, replays)
+    assert s.candidate_agreement_tool == 1.0
+    assert s.candidate_agreement == 0.0
+    assert s.candidate_agreement_full == 0.0
 
 
 def test_systematic_shift_is_real_and_noise_shift_is_not() -> None:
