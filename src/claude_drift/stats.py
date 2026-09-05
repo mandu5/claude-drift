@@ -10,6 +10,7 @@ from claude_drift.classify import agree, signature_of_recorded
 from claude_drift.models import ActionSignature, CutPoint, ReplayResult
 
 FLAG_TARGETS = {"local-write", "delegate"}
+ALPHA = 0.05
 
 
 @dataclass(frozen=True)
@@ -39,6 +40,7 @@ class DriftStats:
     noise_band: Interval | None
     transitions: list[Transition]
     errors: int
+    skipped: int = 0
 
 
 @dataclass(frozen=True)
@@ -56,23 +58,28 @@ def _percentile(values: list[float], q: float) -> float:
 
 
 def _bootstrap(
-    rows: list[_Row], stat: Callable[[list[_Row]], float], rng: random.Random, n_boot: int
+    rows: list[_Row],
+    stat: Callable[[list[_Row]], float],
+    rng: random.Random,
+    n_boot: int,
+    alpha: float = ALPHA,
 ) -> Interval:
     if not rows:
         return Interval(0.0, 0.0)
     samples = [stat([rows[rng.randrange(len(rows))] for _ in rows]) for _ in range(n_boot)]
-    return Interval(_percentile(samples, 0.025), _percentile(samples, 0.975))
+    return Interval(_percentile(samples, alpha / 2), _percentile(samples, 1 - alpha / 2))
 
 
 def _rows(
     cuts: list[CutPoint], replays: list[ReplayResult]
-) -> tuple[list[_Row], int, bool]:
+) -> tuple[list[_Row], int, int, bool]:
     by_cut: dict[str, dict[str, ReplayResult]] = {}
     for r in replays:
         by_cut.setdefault(r.cut_id, {})[r.role] = r
     noise_on = any(r.role == "noise" for r in replays)
     rows: list[_Row] = []
     errors = 0
+    skipped = 0
     for c in cuts:
         got = by_cut.get(c.cut_id, {})
         cand = got.get("candidate")
@@ -81,6 +88,8 @@ def _rows(
         if cand is None or cand.signature is None or missing_noise:
             if (cand is not None and cand.error) or (noi is not None and noi.error):
                 errors += 1
+            else:
+                skipped += 1
             continue
         rows.append(
             _Row(
@@ -90,7 +99,7 @@ def _rows(
                 noi.signature if noi else None,
             )
         )
-    return rows, errors, noise_on
+    return rows, errors, skipped, noise_on
 
 
 def _agreement(rows: list[_Row], which: str) -> float:
@@ -113,11 +122,15 @@ def _transition_delta(rows: list[_Row], src: str, dst: str) -> float:
 def compute(
     cuts: list[CutPoint], replays: list[ReplayResult], seed: int = 0, n_boot: int = 1000
 ) -> DriftStats:
-    rows, errors, noise_on = _rows(cuts, replays)
+    rows, errors, skipped, noise_on = _rows(cuts, replays)
     rng = random.Random(seed)
     cand_agree = _agreement(rows, "candidate")
     noise_agree = _agreement(rows, "noise") if noise_on else None
-    band = _bootstrap(rows, partial(_agreement, which="noise"), rng, n_boot) if noise_on else None
+    band = (
+        _bootstrap(rows, partial(_agreement, which="noise"), rng, n_boot, alpha=ALPHA)
+        if noise_on
+        else None
+    )
 
     cand_counts = Counter(
         (r.recorded.key, r.candidate.key) for r in rows if r.recorded.key != r.candidate.key
@@ -127,12 +140,15 @@ def compute(
         for r in rows
         if r.noise is not None and r.recorded.key != r.noise.key
     )
+    k = len(cand_counts)
+    transition_alpha = ALPHA / k if k >= 1 else ALPHA
     transitions: list[Transition] = []
     for (src, dst), cc in cand_counts.items():
         nc = noise_counts.get((src, dst), 0)
         delta = cc - nc
         if noise_on:
-            interval = _bootstrap(rows, partial(_transition_delta, src=src, dst=dst), rng, n_boot)
+            delta_stat = partial(_transition_delta, src=src, dst=dst)
+            interval = _bootstrap(rows, delta_stat, rng, n_boot, alpha=transition_alpha)
             real = interval.low > 0 or interval.high < 0
         else:
             interval, real = Interval(delta, delta), False
@@ -149,4 +165,5 @@ def compute(
         noise_band=band,
         transitions=transitions,
         errors=errors,
+        skipped=skipped,
     )

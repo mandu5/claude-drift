@@ -80,7 +80,7 @@ def test_errors_excluded_and_counted() -> None:
     ]
     replays += [rep(i, "noise", BASH) for i in range(10)]
     s = compute(cuts, replays)
-    assert s.cuts == 7 and s.errors == 3
+    assert s.cuts == 7 and s.errors == 3 and s.skipped == 0
 
 
 def test_no_noise_mode() -> None:
@@ -96,3 +96,47 @@ def test_bootstrap_is_deterministic() -> None:
     replays = [rep(i, "candidate", READ if i % 3 else BASH) for i in range(30)]
     replays += [rep(i, "noise", READ if i % 7 == 0 else BASH) for i in range(30)]
     assert compute(cuts, replays, seed=3) == compute(cuts, replays, seed=3)
+
+
+def test_missing_replays_count_as_skipped() -> None:
+    cuts = [cut(i) for i in range(10)]
+    # only cuts 0-6 have a candidate (and noise) record at all; 7-9 have no replay
+    replays = [rep(i, "candidate", BASH) for i in range(7)]
+    replays += [rep(i, "noise", BASH) for i in range(7)]
+    s = compute(cuts, replays)
+    assert s.cuts == 7 and s.errors == 0 and s.skipped == 3
+
+
+def test_bonferroni_widens_transition_intervals() -> None:
+    cuts = [cut(i) for i in range(60)]
+
+    def make_replays(with_extra_transitions: bool) -> list[ReplayResult]:
+        replays = []
+        for i in range(60):
+            if i < 6:
+                sig = READ
+            elif with_extra_transitions and 20 <= i < 30:
+                sig = ActionSignature(f"Tool{i - 20}", "other", None, False)
+            else:
+                sig = BASH
+            replays.append(rep(i, "candidate", sig))
+        replays += [rep(i, "noise", BASH) for i in range(60)]
+        return replays
+
+    # single tested transition (Bash -> Read): interval uses alpha = 0.05 (k=1)
+    single = compute(cuts, make_replays(with_extra_transitions=False), seed=0)
+    # 10 more distinct candidate transitions added on cuts 20-29: k=11, alpha = 0.05/11
+    multi = compute(cuts, make_replays(with_extra_transitions=True), seed=0)
+
+    t_single = single.transitions[0]
+    t_multi = multi.transitions[0]
+    assert (t_single.src, t_single.dst) == ("Bash/local-read", "Read/local-read")
+    assert (t_multi.src, t_multi.dst) == ("Bash/local-read", "Read/local-read")
+    # Bonferroni-corrected alpha (0.05/11) is smaller, so the CI uses more extreme
+    # percentiles and must be at least as wide as the uncorrected (k=1, alpha=0.05) one.
+    width_single = t_single.interval.high - t_single.interval.low
+    width_multi = t_multi.interval.high - t_multi.interval.low
+    assert width_multi >= width_single
+    # with only one comparison tested, delta=6 over 60 cuts (noise never drifts) is
+    # still real at alpha=0.05.
+    assert t_single.real is True
