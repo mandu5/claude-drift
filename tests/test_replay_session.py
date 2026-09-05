@@ -46,6 +46,18 @@ def test_blocking_settings_denies_all_tools(drift_home: Path) -> None:
     assert "exit 2" in hooks[0]["hooks"][0]["command"]
 
 
+def test_blocking_settings_is_idempotent_and_atomic(drift_home: Path) -> None:
+    first = blocking_settings_path()
+    content = first.read_text()
+    mtime = first.stat().st_mtime_ns
+    second = blocking_settings_path()
+    assert second == first
+    assert second.read_text() == content
+    assert second.stat().st_mtime_ns == mtime  # unchanged content is not rewritten
+    # the rename target must never be left behind for `--settings` to pick up
+    assert list(drift_home.glob("*.tmp")) == []
+
+
 def test_build_argv(projects_dir: Path, drift_home: Path) -> None:
     cut = alpha_cuts(projects_dir)[0]
     argv = build_argv(cut, "tmp-id", "claude-sonnet-5", Path("/s.json"))

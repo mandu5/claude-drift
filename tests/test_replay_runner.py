@@ -1,12 +1,21 @@
 from __future__ import annotations
 
 import json
+import subprocess
 from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
 
+import pytest
+
 from claude_drift.ingest import cuts_from_session
-from claude_drift.replay import ParsedTurn, SubprocessRunner, parse_stream, replay_cut
+from claude_drift.replay import (
+    ParsedTurn,
+    SubprocessRunner,
+    claude_version,
+    parse_stream,
+    replay_cut,
+)
 
 
 def ev(type_: str, **kw: object) -> str:
@@ -131,6 +140,26 @@ def test_replay_cut_runner_exception_becomes_error(projects_dir: Path, drift_hom
 
     res = replay_cut(cut, "m", "candidate", Boom())
     assert res.signature is None and res.error == "TimeoutError: timed out after 180s"
+
+
+def test_claude_version_is_unknown_when_the_binary_fails(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def boom(*args: object, **kwargs: object) -> object:
+        raise FileNotFoundError("claude")
+
+    monkeypatch.setattr(subprocess, "run", boom)
+    assert claude_version() == "unknown"
+
+
+def test_claude_version_returns_stripped_stdout(monkeypatch: pytest.MonkeyPatch) -> None:
+    def fake(*args: object, **kwargs: object) -> subprocess.CompletedProcess[str]:
+        return subprocess.CompletedProcess(
+            args=["claude", "--version"], returncode=0, stdout="2.1.261 (Claude Code)\n", stderr=""
+        )
+
+    monkeypatch.setattr(subprocess, "run", fake)
+    assert claude_version() == "2.1.261 (Claude Code)"
 
 
 def test_subprocess_runner_streams_and_kills(tmp_path: Path) -> None:

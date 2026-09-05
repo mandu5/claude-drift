@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import shutil
 import threading
 from collections import Counter
 from collections.abc import Callable
@@ -12,7 +13,13 @@ import click
 from claude_drift import __version__
 from claude_drift.ingest import ingest, projects_root
 from claude_drift.models import CutPoint, ReplayResult
-from claude_drift.replay import Runner, SubprocessRunner, replay_cut
+from claude_drift.replay import (
+    Runner,
+    SubprocessRunner,
+    blocking_settings_path,
+    claude_version,
+    replay_cut,
+)
 from claude_drift.report import build_report
 from claude_drift.sample import batch_by_session, sample_cuts
 from claude_drift.store import Run, get_run, latest_run, new_run
@@ -106,6 +113,7 @@ def run_replay(
         "workers": workers,
         "noise": noise,
         "timeout": timeout,
+        "claude_version": claude_version(),
         "started": datetime.now().isoformat(),
         "status": "running",
     }
@@ -137,6 +145,9 @@ def run_replay(
                 if state.aborted:
                     return
                 record(replay_cut(cut, model, role, runner, timeout=timeout))
+
+    # Write the deny-all settings file once, before any worker can race on it.
+    blocking_settings_path()
 
     try:
         with ThreadPoolExecutor(max_workers=workers) as pool:
@@ -212,6 +223,10 @@ def replay(
 
     Uses your claude login.
     """
+    if shutil.which("claude") is None:
+        raise click.ClickException(
+            "claude binary not found on PATH; install Claude Code and log in first"
+        )
     noise = not no_noise
     all_cuts = ingest(projects_root(), project=project)
     if not all_cuts:
@@ -235,7 +250,9 @@ def replay(
         echo=click.echo,
     )
     m = run.read_manifest()
-    click.echo(f"status: {m['status']}  completed: {m['completed']}  errors: {m['errors']}")
+    click.echo(
+        f"status: {m['status']}  completed: {m['completed']}  failed replays: {m['errors']}"
+    )
     click.echo(f"run id: {run.path.name}")
     click.echo()
     click.echo(build_report(run), nl=False)

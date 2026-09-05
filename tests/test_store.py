@@ -60,6 +60,14 @@ def test_latest_and_get(drift_home: Path) -> None:
         get_run("nope")
 
 
+def test_get_run_rejects_path_traversal(drift_home: Path) -> None:
+    new_run(datetime(2026, 9, 5, 13, 0, 0))
+    (drift_home / "secret").mkdir(parents=True, exist_ok=True)
+    for bad in ["..", "../secret", "..\\secret", "sub/20260905-130000", "/etc"]:
+        with pytest.raises(FileNotFoundError):
+            get_run(bad)
+
+
 def test_latest_run_orders_numeric_suffixes(drift_home: Path) -> None:
     for _ in range(12):
         new_run(datetime(2026, 9, 5, 13, 0, 0))

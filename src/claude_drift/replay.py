@@ -42,11 +42,36 @@ def drift_home() -> Path:
 
 
 def blocking_settings_path() -> Path:
+    """Path to the deny-all settings file, written atomically and only when it must change.
+
+    Replay workers call this concurrently; a plain write leaves a window in which a
+    worker passes `--settings` a truncated file, so write a sibling temp file and
+    rename it into place instead.
+    """
     home = drift_home()
     home.mkdir(parents=True, exist_ok=True)
     p = home / "replay-settings.json"
-    p.write_text(json.dumps(BLOCK_ALL_SETTINGS, indent=2))
+    content = json.dumps(BLOCK_ALL_SETTINGS, indent=2)
+    try:
+        if p.read_text(encoding="utf-8") == content:
+            return p
+    except OSError:
+        pass
+    tmp = p.with_suffix(".json.tmp")
+    tmp.write_text(content, encoding="utf-8")
+    os.replace(tmp, p)
     return p
+
+
+def claude_version() -> str:
+    """`claude --version` output, or "unknown" if the binary is missing or misbehaves."""
+    try:
+        done = subprocess.run(
+            ["claude", "--version"], capture_output=True, text=True, timeout=15
+        )
+        return done.stdout.strip()
+    except Exception:
+        return "unknown"
 
 
 @contextmanager

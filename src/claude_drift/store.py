@@ -114,6 +114,10 @@ def latest_run() -> Run | None:
 
 
 def get_run(run_id: str) -> Run:
+    # A run id is a single directory name; anything with a separator or ".." would
+    # let --run escape the runs root, so reject it before touching the filesystem.
+    if "/" in run_id or "\\" in run_id or ".." in run_id:
+        raise FileNotFoundError(f"no run named {run_id} under {runs_root()}")
     path = runs_root() / run_id
     if not path.is_dir():
         raise FileNotFoundError(f"no run named {run_id} under {runs_root()}")

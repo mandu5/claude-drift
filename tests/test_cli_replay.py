@@ -47,6 +47,13 @@ class ScriptedRunner:
         yield iter([line, json.dumps({"type": "result"})])
 
 
+def pretend_claude_installed(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The `replay` command refuses to start without a claude binary; tests never run one."""
+    import claude_drift.cli as cli
+
+    monkeypatch.setattr(cli.shutil, "which", lambda name: "/usr/bin/claude")
+
+
 def test_run_replay_writes_run_with_noise(projects_dir: Path, drift_home: Path) -> None:
     runner = ScriptedRunner()
     run = run_replay(
@@ -61,7 +68,9 @@ def test_run_replay_writes_run_with_noise(projects_dir: Path, drift_home: Path) 
         runner=runner,
         echo=lambda s: None,
     )
-    assert run.read_manifest()["status"] == "done"
+    manifest = run.read_manifest()
+    assert manifest["status"] == "done"
+    assert isinstance(manifest["claude_version"], str) and manifest["claude_version"]
     cuts = run.read_cuts()
     assert len(cuts) == 3
     replays = run.read_replays()
@@ -111,6 +120,7 @@ def test_run_replay_aborts_on_error_rate(projects_dir: Path, drift_home: Path) -
 def test_cli_replay_dry_estimate_and_yes(projects_dir: Path, drift_home: Path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
     import claude_drift.cli as cli
 
+    pretend_claude_installed(monkeypatch)
     monkeypatch.setattr(cli, "SubprocessRunner", ScriptedRunner)
     result = CliRunner().invoke(
         main, ["replay", "--from", "opus-5", "--to", "new", "--turns", "2", "--yes"]
@@ -118,8 +128,22 @@ def test_cli_replay_dry_estimate_and_yes(projects_dir: Path, drift_home: Path, m
     assert result.exit_code == 0, result.output
     assert "estimated input tokens" in result.output
     assert "run id:" in result.output
+    # the run-level count of failed replays, distinct from the report's `errors:` line
+    assert "failed replays: 0" in result.output
     lr = latest_run()
     assert lr is not None and len(lr.read_cuts()) == 2
+
+
+def test_cli_replay_requires_the_claude_binary(
+    projects_dir: Path, drift_home: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import claude_drift.cli as cli
+
+    monkeypatch.setattr(cli.shutil, "which", lambda name: None)
+    result = CliRunner().invoke(main, ["replay", "--from", "opus-5", "--to", "new", "--yes"])
+    assert result.exit_code != 0
+    assert "claude binary not found on PATH" in result.output
+    assert latest_run() is None  # refused before any run directory was created
 
 
 def test_run_replay_marks_failed_when_worker_raises(
@@ -156,6 +180,7 @@ def test_cli_replay_estimate_matches_sampled_cuts(
 ) -> None:
     import claude_drift.cli as cli
 
+    pretend_claude_installed(monkeypatch)
     monkeypatch.setattr(cli, "SubprocessRunner", ScriptedRunner)
     slug = projects_dir / "-fake-project"
     alpha = slug / "alpha.jsonl"
@@ -201,7 +226,10 @@ def test_cli_replay_estimate_matches_sampled_cuts(
     assert printed_n == len(lr.read_cuts())
 
 
-def test_cli_replay_ambiguous_from(projects_dir: Path, drift_home: Path) -> None:
+def test_cli_replay_ambiguous_from(
+    projects_dir: Path, drift_home: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    pretend_claude_installed(monkeypatch)
     slug = projects_dir / "-fake-project"
     text = (
         (slug / "alpha.jsonl")
