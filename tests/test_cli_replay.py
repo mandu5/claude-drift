@@ -5,6 +5,7 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
 
+import pytest
 from click.testing import CliRunner
 
 from claude_drift.cli import main, run_replay
@@ -119,6 +120,85 @@ def test_cli_replay_dry_estimate_and_yes(projects_dir: Path, drift_home: Path, m
     assert "run id:" in result.output
     lr = latest_run()
     assert lr is not None and len(lr.read_cuts()) == 2
+
+
+def test_run_replay_marks_failed_when_worker_raises(
+    projects_dir: Path, drift_home: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import claude_drift.cli as cli
+
+    def boom(*args: object, **kwargs: object) -> None:
+        raise RuntimeError("disk full")
+
+    monkeypatch.setattr(cli, "replay_cut", boom)
+    with pytest.raises(RuntimeError):
+        run_replay(
+            from_model="opus-5",
+            to_model="new",
+            turns=10,
+            workers=1,
+            noise=False,
+            project=None,
+            seed=0,
+            timeout=1.0,
+            runner=ScriptedRunner(),
+            echo=lambda s: None,
+        )
+    run = latest_run()
+    assert run is not None
+    m = run.read_manifest()
+    assert m["status"] == "failed"
+    assert "disk full" in m["failure"]
+
+
+def test_cli_replay_estimate_matches_sampled_cuts(
+    projects_dir: Path, drift_home: Path, repo_dir: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import claude_drift.cli as cli
+
+    monkeypatch.setattr(cli, "SubprocessRunner", ScriptedRunner)
+    slug = projects_dir / "-fake-project"
+    alpha = slug / "alpha.jsonl"
+    extra_lines = []
+    for i in range(3):
+        extra_lines.append(
+            json.dumps(
+                {
+                    "type": "user",
+                    "sessionId": "alpha",
+                    "cwd": str(repo_dir),
+                    "version": "2.1.261",
+                    "message": {"role": "user", "content": f"extra prompt {i}"},
+                }
+            )
+        )
+        extra_lines.append(
+            json.dumps(
+                {
+                    "type": "assistant",
+                    "sessionId": "alpha",
+                    "cwd": str(repo_dir),
+                    "version": "2.1.261",
+                    "message": {
+                        "model": "claude-opus-5",
+                        "role": "assistant",
+                        "content": [
+                            {"type": "tool_use", "name": "Bash", "input": {"command": f"echo {i}"}}
+                        ],
+                    },
+                }
+            )
+        )
+    alpha.write_text(alpha.read_text().rstrip("\n") + "\n" + "\n".join(extra_lines) + "\n")
+
+    result = CliRunner().invoke(
+        main, ["replay", "--from", "opus-5", "--to", "new", "--turns", "60", "--yes"]
+    )
+    assert result.exit_code == 0, result.output
+    printed_n = int(result.output.split("cuts: ")[1].split()[0])
+    lr = latest_run()
+    assert lr is not None
+    assert printed_n == len(lr.read_cuts())
 
 
 def test_cli_replay_ambiguous_from(projects_dir: Path, drift_home: Path) -> None:

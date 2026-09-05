@@ -137,8 +137,21 @@ def run_replay(
                     return
                 record(replay_cut(cut, model, role, runner, timeout=timeout))
 
-    with ThreadPoolExecutor(max_workers=workers) as pool:
-        list(pool.map(work, batch_by_session(cuts)))
+    try:
+        with ThreadPoolExecutor(max_workers=workers) as pool:
+            list(pool.map(work, batch_by_session(cuts)))
+    except Exception as exc:
+        manifest.update(
+            {
+                "finished": datetime.now().isoformat(),
+                "completed": state.completed,
+                "errors": state.errors,
+                "status": "failed",
+                "failure": f"{type(exc).__name__}: {exc}",
+            }
+        )
+        run.write_manifest(manifest)
+        raise
 
     manifest.update(
         {
@@ -203,7 +216,7 @@ def replay(
     if not all_cuts:
         raise click.ClickException("no replayable cuts found; run `drift scan`")
     resolved = resolve_from_model(all_cuts, from_model)
-    n = min(turns, len([c for c in all_cuts if c.model == resolved]))
+    n = len(sample_cuts([c for c in all_cuts if c.model == resolved], turns=turns, seed=seed))
     est = n * (2 if noise else 1) * TOKENS_PER_CUT_ESTIMATE
     click.echo(f"cuts: {n}  replays: {n * (2 if noise else 1)}  estimated input tokens: {est:,}")
     if not yes:
