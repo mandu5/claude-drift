@@ -2,13 +2,19 @@ from __future__ import annotations
 
 import json
 import os
+import subprocess
+import threading
+import time
 import uuid
-from collections.abc import Iterator
-from contextlib import contextmanager
+from collections.abc import Iterable, Iterator
+from contextlib import AbstractContextManager, contextmanager
+from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any, Protocol
 
+from claude_drift.classify import TEXT_ONLY, signature
 from claude_drift.ingest import read_lines
-from claude_drift.models import CutPoint
+from claude_drift.models import CutPoint, ReplayResult
 
 BLOCK_ALL_SETTINGS = {
     "hooks": {
@@ -86,3 +92,135 @@ def build_argv(cut: CutPoint, temp_id: str, model: str, settings: Path) -> list[
         "--settings",
         str(settings),
     ]
+
+
+@dataclass
+class ParsedTurn:
+    tool_use: dict[str, Any] | None
+    usage: dict[str, int] = field(default_factory=dict)
+    error: str | None = None
+
+
+def parse_stream(lines: Iterable[str]) -> ParsedTurn:
+    usage: dict[str, int] = {}
+    texts: list[str] = []
+    for raw in lines:
+        raw = raw.strip()
+        if not raw:
+            continue
+        try:
+            ev = json.loads(raw)
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(ev, dict):
+            continue
+        if ev.get("type") == "assistant":
+            msg = ev.get("message", {})
+            if isinstance(msg.get("usage"), dict):
+                usage = {
+                    k: int(v) for k, v in msg["usage"].items() if isinstance(v, int | float)
+                }
+            synthetic = msg.get("model") == "<synthetic>"
+            for block in msg.get("content", []):
+                if not isinstance(block, dict):
+                    continue
+                if block.get("type") == "text":
+                    texts.append(str(block.get("text", "")))
+                if block.get("type") == "tool_use" and not synthetic:
+                    return ParsedTurn(
+                        tool_use={"name": block.get("name"), "input": block.get("input", {})},
+                        usage=usage,
+                    )
+            if synthetic:
+                return ParsedTurn(
+                    tool_use=None, usage=usage, error=" ".join(texts) or "synthetic error"
+                )
+        elif ev.get("type") == "result":
+            if ev.get("is_error"):
+                return ParsedTurn(
+                    tool_use=None, usage=usage, error=" ".join(texts) or str(ev.get("subtype"))
+                )
+            return ParsedTurn(tool_use=None, usage=usage, error=None)
+    return ParsedTurn(tool_use=None, usage=usage, error="stream ended without result")
+
+
+class Runner(Protocol):
+    def stream(
+        self, argv: list[str], cwd: str, timeout: float
+    ) -> AbstractContextManager[Iterator[str]]: ...
+
+
+class SubprocessRunner:
+    """Runs argv, yields stdout lines, kills the process on context exit or timeout."""
+
+    def __init__(self) -> None:
+        self.last_returncode: int | None = None
+        self.timed_out = False
+
+    @contextmanager
+    def stream(self, argv: list[str], cwd: str, timeout: float) -> Iterator[Iterator[str]]:
+        self.timed_out = False
+        proc = subprocess.Popen(
+            argv,
+            cwd=cwd,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+        )
+
+        def on_timeout() -> None:
+            self.timed_out = True
+            proc.kill()
+
+        timer = threading.Timer(timeout, on_timeout)
+        timer.start()
+
+        def gen() -> Iterator[str]:
+            assert proc.stdout is not None
+            for line in proc.stdout:
+                yield line.rstrip("\n")
+
+        try:
+            yield gen()
+        finally:
+            timer.cancel()
+            if proc.poll() is None:
+                proc.kill()
+            try:
+                proc.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                pass
+            self.last_returncode = proc.returncode
+
+
+def replay_cut(
+    cut: CutPoint, model: str, role: str, runner: Runner, timeout: float = 180.0
+) -> ReplayResult:
+    start = time.monotonic()
+    settings = blocking_settings_path()
+    try:
+        with temp_session(cut) as temp_id:
+            argv = build_argv(cut, temp_id, model, settings)
+            with runner.stream(argv, cut.cwd, timeout) as lines:
+                turn = parse_stream(lines)
+    except Exception as exc:  # noqa: BLE001 - any runner failure is recorded, never raised
+        return ReplayResult(
+            cut_id=cut.cut_id,
+            model=model,
+            role=role,
+            signature=None,
+            raw_tool_use=None,
+            usage={},
+            error=f"{type(exc).__name__}: {exc}",
+            duration_ms=int((time.monotonic() - start) * 1000),
+        )
+    duration = int((time.monotonic() - start) * 1000)
+    if turn.error is not None:
+        return ReplayResult(cut.cut_id, model, role, None, None, turn.usage, turn.error, duration)
+    if turn.tool_use is None:
+        return ReplayResult(cut.cut_id, model, role, TEXT_ONLY, None, turn.usage, None, duration)
+    sig = signature(str(turn.tool_use["name"]), dict(turn.tool_use["input"]), cut.cwd)
+    return ReplayResult(cut.cut_id, model, role, sig, turn.tool_use, turn.usage, None, duration)
