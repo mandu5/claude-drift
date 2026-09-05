@@ -14,11 +14,14 @@ and reports which next-action changes are real and which are noise.
 
 ## Install
 
+Not on PyPI yet. Run it straight from GitHub with uv:
+
 ```bash
-uvx claude-drift scan
+uvx --from git+https://github.com/mandu5/claude-drift drift scan
 ```
 
-or `pip install claude-drift`.
+or clone and `uv sync` (see Development). `uvx claude-drift` / `pip install claude-drift` will
+work once the first release is published.
 
 ## Use
 
