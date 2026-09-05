@@ -60,6 +60,14 @@ def test_latest_and_get(drift_home: Path) -> None:
         get_run("nope")
 
 
+def test_latest_run_orders_numeric_suffixes(drift_home: Path) -> None:
+    for _ in range(12):
+        new_run(datetime(2026, 9, 5, 13, 0, 0))
+    lr = latest_run()
+    assert lr is not None and lr.path.name == "20260905-130000-12"
+    assert get_run("20260905-130000-12").path.name == "20260905-130000-12"
+
+
 def test_append_replay_is_thread_safe(drift_home: Path) -> None:
     run = new_run(datetime(2026, 9, 5, 13, 0, 0))
     threads = [

@@ -91,11 +91,25 @@ def new_run(now: datetime | None = None) -> Run:
     return Run(path)
 
 
+def _run_sort_key(path: Path) -> tuple[str, int]:
+    """Sort run dirs by (stamp, numeric suffix) so "-10" doesn't sort before "-2"."""
+    name = path.name
+    stamp = name[:15]
+    rest = name[15:]
+    suffix = 0
+    if rest.startswith("-"):
+        try:
+            suffix = int(rest[1:])
+        except ValueError:
+            suffix = 0
+    return (stamp, suffix)
+
+
 def latest_run() -> Run | None:
     root = runs_root()
     if not root.is_dir():
         return None
-    dirs = sorted(p for p in root.iterdir() if p.is_dir())
+    dirs = sorted((p for p in root.iterdir() if p.is_dir()), key=_run_sort_key)
     return Run(dirs[-1]) if dirs else None
 
 
