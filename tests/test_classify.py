@@ -63,6 +63,17 @@ def test_signature_bash_uses_rules() -> None:
     assert signature("Bash", {"command": "curl x"}, "/r").target == "remote"
 
 
+def test_path_scope_root_files_and_dotted_dirs() -> None:
+    assert signature("Read", {"file_path": "/repo/Makefile"}, "/repo").path_scope == "."
+    assert signature("Write", {"file_path": "/repo/LICENSE"}, "/repo").path_scope == "."
+    assert (
+        signature("Grep", {"pattern": "x", "path": "/repo/my.pkg"}, "/repo").path_scope
+        == "my.pkg"
+    )
+    assert signature("Glob", {"pattern": "*.py", "path": "/repo/src"}, "/repo").path_scope == "src"
+    assert signature("Read", {"file_path": "/repo/src/a/b.py"}, "/repo").path_scope == "src"
+
+
 def test_agree_levels() -> None:
     a = ActionSignature("Read", "local-read", "src", False)
     b = ActionSignature("Read", "local-read", "tests", False)

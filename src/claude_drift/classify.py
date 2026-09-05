@@ -91,7 +91,7 @@ def classify_bash(command: str) -> str:
     return "other"
 
 
-def _path_scope(path: str | None, cwd: str) -> str | None:
+def _path_scope(path: str | None, cwd: str, is_dir: bool) -> str | None:
     if not path:
         return None
     rel = os.path.relpath(path, cwd) if os.path.isabs(path) else path
@@ -100,18 +100,21 @@ def _path_scope(path: str | None, cwd: str) -> str | None:
     parts = rel.split(os.sep)
     if len(parts) > 1:
         return parts[0]
-    return "." if "." in parts[0] else parts[0]  # "README.md" -> ".", "tests" -> "tests"
+    return parts[0] if is_dir else "."  # dir keeps its name; a root-level file collapses to "."
 
 
 def signature(tool: str, tool_input: dict[str, Any], cwd: str) -> ActionSignature:
     if tool == "Bash":
         return ActionSignature(tool, classify_bash(str(tool_input.get("command", ""))), None, False)
-    if tool in {"Read", "Glob", "Grep", "NotebookRead"}:
-        p = tool_input.get("file_path") or tool_input.get("path")
-        return ActionSignature(tool, "local-read", _path_scope(p, cwd), False)
+    if tool in {"Read", "NotebookRead"}:
+        p = tool_input.get("file_path")
+        return ActionSignature(tool, "local-read", _path_scope(p, cwd, is_dir=False), False)
+    if tool in {"Glob", "Grep"}:
+        p = tool_input.get("path")
+        return ActionSignature(tool, "local-read", _path_scope(p, cwd, is_dir=True), False)
     if tool in {"Write", "Edit", "MultiEdit", "NotebookEdit"}:
         p = tool_input.get("file_path") or tool_input.get("notebook_path")
-        return ActionSignature(tool, "local-write", _path_scope(p, cwd), False)
+        return ActionSignature(tool, "local-write", _path_scope(p, cwd, is_dir=False), False)
     if tool == "AskUserQuestion":
         return ActionSignature(tool, "ask-user", None, False)
     if tool in {"Agent", "Task"}:
