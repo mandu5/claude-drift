@@ -115,7 +115,6 @@ ActionSignature(
   tool: str,             # Bash, Read, Write, Edit, Agent, AskUserQuestion, Skill, ...
   target: str,           # local-read | local-write | remote | delegate | ask-user | skill | other
   path_scope: str|None,  # 파일 경로가 있으면 repo 상대 경로의 첫 디렉토리
-  asks_first: bool,      # 도구 전에 AskUserQuestion이 있었는가
   text_only: bool,       # 도구 없이 텍스트로 끝났는가
 )
 ```
