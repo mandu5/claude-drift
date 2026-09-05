@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import shutil
+import signal
 import threading
 from collections import Counter
 from collections.abc import Callable
@@ -83,6 +84,17 @@ class _Progress:
     aborted: bool = False
 
 
+def _raise_sigterm(signum: int, frame: object) -> None:
+    """SIGTERM handler: turn the signal into a catchable SystemExit(143).
+
+    Python's default SIGTERM handling terminates the process immediately, which skips
+    every `finally` block and leaves temp_session copies behind under ~/.claude/projects
+    and the run manifest stuck at status "running". Raising SystemExit instead lets
+    run_replay's exception handling clean up before the process exits.
+    """
+    raise SystemExit(143)
+
+
 def run_replay(
     *,
     from_model: str,
@@ -151,15 +163,37 @@ def run_replay(
             for cut in batch:
                 if state.aborted:
                     return
-                record(replay_cut(cut, model, role, runner, timeout=timeout))
+                try:
+                    result = replay_cut(cut, model, role, runner, timeout=timeout)
+                except BaseException:
+                    # Stop other in-flight/queued batches from starting new cuts as soon
+                    # as possible, before the pool shutdown below waits for them.
+                    state.aborted = True
+                    raise
+                record(result)
 
     # Write the deny-all settings file once, before any worker can race on it.
     blocking_settings_path()
 
+    pool = ThreadPoolExecutor(max_workers=workers)
     try:
-        with ThreadPoolExecutor(max_workers=workers) as pool:
-            list(pool.map(work, batch_by_session(cuts)))
+        list(pool.map(work, batch_by_session(cuts)))
+    except (KeyboardInterrupt, SystemExit) as exc:
+        state.aborted = True
+        pool.shutdown(wait=True)
+        manifest.update(
+            {
+                "finished": datetime.now().isoformat(),
+                "completed": state.completed,
+                "errors": state.errors,
+                "status": "interrupted",
+                "failure": f"{type(exc).__name__}",
+            }
+        )
+        run.write_manifest(manifest)
+        raise
     except Exception as exc:
+        pool.shutdown(wait=True)
         manifest.update(
             {
                 "finished": datetime.now().isoformat(),
@@ -171,6 +205,8 @@ def run_replay(
         )
         run.write_manifest(manifest)
         raise
+    else:
+        pool.shutdown(wait=True)
 
     manifest.update(
         {
@@ -239,6 +275,7 @@ def replay(
 
     Uses your claude login.
     """
+    signal.signal(signal.SIGTERM, _raise_sigterm)
     if shutil.which("claude") is None:
         raise click.ClickException(
             "claude binary not found on PATH; install Claude Code and log in first"

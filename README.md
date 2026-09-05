@@ -52,6 +52,9 @@ Each run writes a directory under `~/.claude-drift/runs/` holding the sampled pr
 tool inputs of both the recorded and the proposed actions, and the rendered report. That is your
 own session content sitting on your own disk; delete the directory to remove it.
 
+If a replay is interrupted (Ctrl-C or SIGTERM) in-flight replays finish first so temporary
+session copies are always removed; the run is marked `interrupted`.
+
 ## How it works
 
 1. **ingest** — finds human prompts in your session logs that were followed by a tool call.

@@ -175,6 +175,42 @@ def test_run_replay_marks_failed_when_worker_raises(
     assert "disk full" in m["failure"]
 
 
+def test_run_replay_marks_interrupted_on_keyboard_interrupt(
+    projects_dir: Path, drift_home: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import claude_drift.cli as cli
+
+    def boom(*args: object, **kwargs: object) -> None:
+        raise KeyboardInterrupt()
+
+    monkeypatch.setattr(cli, "replay_cut", boom)
+    with pytest.raises(KeyboardInterrupt):
+        run_replay(
+            from_model="opus-5",
+            to_model="new",
+            turns=10,
+            workers=1,
+            noise=False,
+            project=None,
+            seed=0,
+            timeout=1.0,
+            runner=ScriptedRunner(),
+            echo=lambda s: None,
+        )
+    run = latest_run()
+    assert run is not None
+    m = run.read_manifest()
+    assert m["status"] == "interrupted"
+
+
+def test_raise_sigterm_raises_system_exit_143() -> None:
+    import claude_drift.cli as cli
+
+    with pytest.raises(SystemExit) as exc_info:
+        cli._raise_sigterm(15, None)
+    assert exc_info.value.code == 143
+
+
 def test_cli_replay_estimate_matches_sampled_cuts(
     projects_dir: Path, drift_home: Path, repo_dir: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
