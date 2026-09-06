@@ -16,7 +16,8 @@
    prepared limitations comment yourself within the first ten minutes, then stay on the thread
    for the next four hours to answer.
 2. **GeekNews (news.hada.io)** — Korean summary from `geeknews.md`, same numbers, link the repo.
-   Any day works; Korean readers are active on weekends too.
+   Account rhdudals0505 was created 2026-09-06 and GeekNews blocks posting for 7 days after
+   sign-up, so the earliest submission is 2026-09-13. Use the 글등록 page, type Show (프로젝트 소개).
 3. **r/ClaudeAI** — same finding, rewritten as a post rather than a launch. Lead with the 80%
    versus 35% contrast; put the install line at the bottom.
 4. **anthropics/claude-code Discussions** — Show and Tell category. Frame it as a measurement
