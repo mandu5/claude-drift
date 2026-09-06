@@ -75,7 +75,7 @@ session copies are always removed; the run is marked `interrupted`.
 4. **classify** — normalises each action to `tool/target` (e.g. `Bash/local-read`, `Read/local-read`,
    `Agent/delegate`, `Bash/remote`).
 5. **stats** — agreement with the recorded action for the new model and for the old model; a
-   bootstrap 95% band of old-vs-old agreement is the noise floor. The bootstrap resamples
+   bootstrap 95% band of old-vs-record agreement is the noise floor. The bootstrap resamples
    sessions, not turns, because turns from one session are not independent. Transitions whose
    new-minus-old count has a bootstrap interval excluding zero are reported as REAL, with the
    interval Bonferroni-corrected over the number of transitions tested. Transitions are
