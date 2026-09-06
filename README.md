@@ -44,6 +44,7 @@ Example output: see [docs/examples/first-report.md](docs/examples/first-report.m
 | `--turns N` | 30 | How many recorded turns to sample and replay. |
 | `--per-session N` | 3 | Max cuts sampled from one session. |
 | `--workers N` | 4 | Replays in flight at once. Sessions are batched so one worker owns a session. |
+| `--self-replays N` | 1 | Old-model replays per cut. Above 1 the report also gives old-vs-old self-agreement, which separates the model's own sampling instability from replay-vs-interactive mismatch. Multiplies cost. |
 | `--no-noise` | off | Skip the old-model replay. Faster and half the cost, but no noise band and no verdict. |
 | `--project PATH` | all | Only replay sessions whose working directory is under `PATH`. Also on `drift scan`. |
 | `--seed N` | 0 | Seed for sampling and for the bootstrap, so a run is reproducible. |

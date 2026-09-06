@@ -40,6 +40,50 @@ def _verdict(stats: DriftStats) -> str:
     return "candidate agrees MORE than old model with itself (above noise band)"
 
 
+SELF_GAP = 0.20
+
+REPRODUCES = (
+    "interpretation: the old model mostly reproduces itself; the gap to the record is "
+    "replay-vs-interactive mismatch, not model instability"
+)
+UNSTABLE = (
+    "interpretation: the old model does not reproduce itself either; the turns "
+    "themselves are unstable"
+)
+BELOW_RECORD = (
+    "interpretation: self-agreement is lower than agreement with the record; "
+    "inspect the run"
+)
+
+
+def _self_lines(stats: DriftStats) -> list[str]:
+    """The old model replayed against itself K times, and what that comparison means.
+
+    `old-vs-record` mixes the model's own sampling instability with the mismatch
+    between an interactive session and a `claude -p` replay. Self-agreement isolates
+    the first, so the two numbers together say which one the gap is made of.
+    """
+    self_agreement = stats.self_agreement
+    if self_agreement is None or stats.noise_agreement is None:
+        return []
+    gap = self_agreement - stats.noise_agreement
+    if gap > SELF_GAP:
+        interpretation = REPRODUCES
+    elif abs(gap) <= SELF_GAP:
+        interpretation = UNSTABLE
+    else:
+        interpretation = BELOW_RECORD
+    band = (
+        ""
+        if stats.self_band is None
+        else f"  (band {_pct(stats.self_band.low)}-{_pct(stats.self_band.high)})"
+    )
+    return [
+        f"old-vs-old self-agreement (k={stats.self_replays}): {_pct(self_agreement)}{band}",
+        interpretation,
+    ]
+
+
 def _header_lines(stats: DriftStats) -> list[str]:
     noise = (
         "not measured" if stats.noise_agreement is None else _pct(stats.noise_agreement)
@@ -48,7 +92,8 @@ def _header_lines(stats: DriftStats) -> list[str]:
         f"sessions replayed: {stats.sessions}   turns sampled: {stats.cuts}   "
         f"errors: {stats.errors}   skipped: {stats.skipped}",
         f"next-action agreement: {_pct(stats.candidate_agreement)}  {_band(stats.noise_band)}",
-        f"old-vs-old agreement: {noise}",
+        f"old-vs-record agreement: {noise}",
+        *_self_lines(stats),
         f"verdict: {_verdict(stats)}",
         f"agreement by level: tool {_pct(stats.candidate_agreement_tool)} / "
         f"target {_pct(stats.candidate_agreement)} / "

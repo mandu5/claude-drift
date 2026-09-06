@@ -97,26 +97,29 @@ def _raise_sigterm(signum: int, frame: object) -> None:
     raise SystemExit(143)
 
 
-# Within one session batch, replay every candidate cut before any noise cut, matching the
-# order a single (to_model, "candidate") + (from_model, "noise") pass would produce.
+# Within one session batch, each cut's candidate replay runs immediately before that
+# cut's noise attempts. Those K+1 calls share an identical prompt prefix, so running
+# them back to back is what lets prompt caching hit; replaying all candidates first
+# and all noise afterwards re-created the cache for every call instead.
 _ROLE_ORDER = {"candidate": 0, "noise": 1}
 
+# (cut, model, role, attempt) - `attempt` indexes the K --self-replays of the old model.
+Item = tuple[CutPoint, str, str, int]
 
-def _batch_items_by_session(
-    items: list[tuple[CutPoint, str, str]],
-) -> list[list[tuple[CutPoint, str, str]]]:
-    by_session: dict[str, list[tuple[CutPoint, str, str]]] = defaultdict(list)
+
+def _batch_items_by_session(items: list[Item]) -> list[list[Item]]:
+    by_session: dict[str, list[Item]] = defaultdict(list)
     for item in items:
         by_session[item[0].session_path].append(item)
     return [
-        sorted(g, key=lambda it: (_ROLE_ORDER.get(it[2], 2), it[0].line_index))
+        sorted(g, key=lambda it: (it[0].line_index, _ROLE_ORDER.get(it[2], 2), it[3]))
         for _, g in sorted(by_session.items())
     ]
 
 
 def _execute(
     run: Run,
-    cuts_by_role: list[tuple[CutPoint, str, str]],
+    cuts_by_role: list[Item],
     manifest: dict[str, Any],
     runner: Runner,
     workers: int,
@@ -146,12 +149,12 @@ def _execute(
         outcome = r.signature.key if r.signature else r.error
         echo(f"[{state.completed}/{total}] {r.cut_id} {r.model} -> {outcome}")
 
-    def work(batch: list[tuple[CutPoint, str, str]]) -> None:
-        for cut, model, role in batch:
+    def work(batch: list[Item]) -> None:
+        for cut, model, role, attempt in batch:
             if state.aborted:
                 return
             try:
-                result = replay_cut(cut, model, role, runner, timeout=timeout)
+                result = replay_cut(cut, model, role, runner, timeout=timeout, attempt=attempt)
             except BaseException:
                 # Stop other in-flight/queued batches from starting new cuts as soon
                 # as possible, before the pool shutdown below waits for them.
@@ -220,6 +223,7 @@ def run_replay(
     runner: Runner,
     echo: Callable[[str], None],
     per_session: int = 3,
+    self_replays: int = 1,
 ) -> Run:
     all_cuts = ingest(projects_root(), project=project)
     if not all_cuts:
@@ -244,15 +248,16 @@ def run_replay(
         "noise": noise,
         "timeout": timeout,
         "per_session": per_session,
+        "self_replays": self_replays,
         "claude_version": claude_version(),
         "started": datetime.now().isoformat(),
         "status": "running",
     }
     run.write_manifest(manifest)
 
-    items: list[tuple[CutPoint, str, str]] = [(c, to_model, "candidate") for c in cuts]
+    items: list[Item] = [(c, to_model, "candidate", 0) for c in cuts]
     if noise:
-        items += [(c, resolved_from, "noise") for c in cuts]
+        items += [(c, resolved_from, "noise", a) for c in cuts for a in range(self_replays)]
 
     _execute(run, items, manifest, runner, workers, timeout, echo)
     return run
@@ -280,6 +285,14 @@ def run_replay(
     type=int,
     help="Max cuts sampled from one session.",
 )
+@click.option(
+    "--self-replays",
+    "self_replays",
+    default=1,
+    show_default=True,
+    type=int,
+    help="Old-model replays per cut; >1 measures the model's own instability.",
+)
 @click.option("--workers", default=4, show_default=True, type=int)
 @click.option(
     "--no-noise",
@@ -302,6 +315,7 @@ def replay(
     to_model: str,
     turns: int,
     per_session: int,
+    self_replays: int,
     workers: int,
     no_noise: bool,
     project: str | None,
@@ -331,7 +345,7 @@ def replay(
             per_session=per_session,
         )
     )
-    n_replays = n * (2 if noise else 1)
+    n_replays = n * (1 + self_replays) if noise else n
     est = n_replays * TOKENS_PER_CUT_ESTIMATE
     est_minutes = n_replays * SECONDS_PER_REPLAY_ESTIMATE / workers / 60
     click.echo(
@@ -352,6 +366,7 @@ def replay(
         runner=SubprocessRunner(),
         echo=click.echo,
         per_session=per_session,
+        self_replays=self_replays,
     )
     m = run.read_manifest()
     click.echo(
@@ -366,24 +381,27 @@ def replay(
 
 def _pending_targets(
     cuts: list[CutPoint], replays: list[ReplayResult], manifest: dict[str, Any]
-) -> list[tuple[CutPoint, str, str]]:
-    """(cut, model, role) triples for replays that are missing or have `error` set.
+) -> list[Item]:
+    """(cut, model, role, attempt) items for replays that are missing or have `error` set.
 
-    A role counts as done for a cut as soon as any recorded replay for that (cut, role)
-    has no error, regardless of how many earlier attempts for it failed.
+    A (role, attempt) slot counts as done for a cut as soon as any recorded replay for it
+    has no error, regardless of how many earlier tries for that slot failed. Manifests
+    written before --self-replays existed have no `self_replays` key and mean one attempt.
     """
-    roles: list[tuple[str, str]] = [("candidate", str(manifest["to"]))]
+    slots: list[tuple[str, str, int]] = [("candidate", str(manifest["to"]), 0)]
     if manifest["noise"]:
-        roles.append(("noise", str(manifest["from"])))
-    succeeded: dict[str, set[str]] = {role: set() for role, _ in roles}
+        self_replays = int(manifest.get("self_replays", 1))
+        slots += [("noise", str(manifest["from"]), a) for a in range(self_replays)]
+    succeeded: dict[tuple[str, int], set[str]] = {(role, a): set() for role, _, a in slots}
     for r in replays:
-        if r.role in succeeded and r.error is None:
-            succeeded[r.role].add(r.cut_id)
+        key = (r.role, r.attempt)
+        if key in succeeded and r.error is None:
+            succeeded[key].add(r.cut_id)
     return [
-        (cut, model, role)
+        (cut, model, role, attempt)
         for cut in cuts
-        for role, model in roles
-        if cut.cut_id not in succeeded[role]
+        for role, model, attempt in slots
+        if cut.cut_id not in succeeded[(role, attempt)]
     ]
 
 

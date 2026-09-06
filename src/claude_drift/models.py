@@ -47,6 +47,8 @@ class ReplayResult:
     usage: dict[str, int]
     error: str | None
     duration_ms: int
+    # Which of the K --self-replays attempts this is. Candidates only ever have one.
+    attempt: int = 0
 
 
 def to_dict(obj: CutPoint | ReplayResult | ActionSignature | RecordedAction) -> dict[str, Any]:
@@ -89,4 +91,5 @@ def replay_from_dict(d: dict[str, Any]) -> ReplayResult:
         usage={k: int(v) for k, v in d.get("usage", {}).items()},
         error=d.get("error"),
         duration_ms=int(d["duration_ms"]),
+        attempt=int(d.get("attempt", 0)),
     )

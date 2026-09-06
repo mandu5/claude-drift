@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from collections.abc import Iterator
 from contextlib import contextmanager
+from dataclasses import replace
 from pathlib import Path
 
 from click.testing import CliRunner
@@ -42,7 +43,8 @@ def test_render_text() -> None:
     assert "model-drift report  opus-5 -> fable-5.1" in out
     assert "sessions replayed: 30   turns sampled: 60   errors: 1" in out
     assert "next-action agreement: 81%  (noise band 76%-88%)" in out
-    assert "old-vs-old agreement: 83%" in out
+    assert "old-vs-record agreement: 83%" in out
+    assert "self-agreement" not in out  # not measured with --self-replays 1
     assert "verdict: no detectable drift (candidate agreement inside noise band)" in out
     assert "agreement by level: tool 0% / target 81% / full 0%" in out
     assert (
@@ -69,11 +71,49 @@ def test_render_md_has_table_and_ci() -> None:
     assert "| 2 | Write/local-write -> Read/local-read | 7 | 0 | 7 [3, 11] | !! |" in out
 
 
+def test_render_self_agreement_and_interpretation() -> None:
+    base = stats_fixture()
+    # the old model agrees with the record only 19% of the time but reproduces its own
+    # replay 62% of the time: most of that gap is replay-vs-interactive, not sampling
+    high = replace(
+        base,
+        noise_agreement=0.19,
+        self_replays=3,
+        self_agreement=0.62,
+        self_band=Interval(0.55, 0.70),
+    )
+    out = render(high, {"from": "a", "to": "b"})
+    assert "old-vs-old self-agreement (k=3): 62%  (band 55%-70%)" in out
+    assert (
+        "interpretation: the old model mostly reproduces itself; the gap to the record "
+        "is replay-vs-interactive mismatch, not model instability" in out
+    )
+    assert "old-vs-old self-agreement (k=3): 62%" in render(high, {}, fmt="md")
+
+    flat = replace(
+        base,
+        noise_agreement=0.19,
+        self_replays=3,
+        self_agreement=0.25,
+        self_band=Interval(0.2, 0.3),
+    )
+    assert (
+        "interpretation: the old model does not reproduce itself either; the turns "
+        "themselves are unstable" in render(flat, {"from": "a", "to": "b"})
+    )
+
+    low = replace(base, self_replays=3, self_agreement=0.40, self_band=Interval(0.3, 0.5))
+    assert (
+        "interpretation: self-agreement is lower than agreement with the record; "
+        "inspect the run" in render(low, {"from": "a", "to": "b"})
+    )
+
+
 def test_render_without_noise_and_empty() -> None:
     s = DriftStats(5, 2, 1.0, None, None, [], 0)
     out = render(s, {"from": "a", "to": "b"})
     assert "(noise band not measured)" in out
-    assert "old-vs-old agreement: not measured" in out
+    assert "old-vs-record agreement: not measured" in out
     assert "verdict: not measured (run without --no-noise to get a verdict)" in out
     assert "(none)" in out
 

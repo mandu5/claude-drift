@@ -222,7 +222,12 @@ class SubprocessRunner:
 
 
 def replay_cut(
-    cut: CutPoint, model: str, role: str, runner: Runner, timeout: float = 180.0
+    cut: CutPoint,
+    model: str,
+    role: str,
+    runner: Runner,
+    timeout: float = 180.0,
+    attempt: int = 0,
 ) -> ReplayResult:
     start = time.monotonic()
     settings = blocking_settings_path()
@@ -241,11 +246,18 @@ def replay_cut(
             usage={},
             error=f"{type(exc).__name__}: {exc}",
             duration_ms=int((time.monotonic() - start) * 1000),
+            attempt=attempt,
         )
     duration = int((time.monotonic() - start) * 1000)
     if turn.error is not None:
-        return ReplayResult(cut.cut_id, model, role, None, None, turn.usage, turn.error, duration)
+        return ReplayResult(
+            cut.cut_id, model, role, None, None, turn.usage, turn.error, duration, attempt
+        )
     if turn.tool_use is None:
-        return ReplayResult(cut.cut_id, model, role, TEXT_ONLY, None, turn.usage, None, duration)
+        return ReplayResult(
+            cut.cut_id, model, role, TEXT_ONLY, None, turn.usage, None, duration, attempt
+        )
     sig = signature(str(turn.tool_use["name"]), dict(turn.tool_use["input"]), cut.cwd)
-    return ReplayResult(cut.cut_id, model, role, sig, turn.tool_use, turn.usage, None, duration)
+    return ReplayResult(
+        cut.cut_id, model, role, sig, turn.tool_use, turn.usage, None, duration, attempt
+    )

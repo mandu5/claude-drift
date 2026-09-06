@@ -56,3 +56,19 @@ def test_signature_key() -> None:
     sig = ActionSignature(tool="Read", target="local-read", path_scope="src", text_only=False)
     assert sig.key == "Read/local-read"
     assert ActionSignature(tool="", target="text", path_scope=None, text_only=True).key == "text"
+
+
+def test_replay_roundtrip_keeps_the_attempt_index() -> None:
+    r = ReplayResult(
+        cut_id="s1:14", model="old", role="noise", signature=None,
+        raw_tool_use=None, usage={}, error=None, duration_ms=1, attempt=2,
+    )
+    assert replay_from_dict(to_dict(r)) == r
+
+
+def test_attempt_defaults_to_zero_for_rows_written_before_self_replays() -> None:
+    d = {
+        "cut_id": "s1:14", "model": "old", "role": "noise", "signature": None,
+        "raw_tool_use": None, "usage": {}, "error": None, "duration_ms": 1,
+    }
+    assert replay_from_dict(d).attempt == 0

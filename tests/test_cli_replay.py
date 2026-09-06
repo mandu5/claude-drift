@@ -10,7 +10,7 @@ from click.testing import CliRunner
 
 from claude_drift.cli import main, run_replay
 from claude_drift.ingest import ingest, projects_root
-from claude_drift.models import ActionSignature, ReplayResult
+from claude_drift.models import ActionSignature, CutPoint, RecordedAction, ReplayResult
 from claude_drift.sample import sample_cuts
 from claude_drift.stats import compute
 from claude_drift.store import latest_run, new_run
@@ -410,3 +410,121 @@ def test_resume_nothing_pending(
     assert result.exit_code == 0, result.output
     assert "nothing to resume: all replays succeeded" in result.output
     assert "resumes" not in run.read_manifest()
+
+
+def make_cut(session: str, line_index: int) -> CutPoint:
+    return CutPoint(
+        f"{session}:{line_index}",
+        f"/p/{session}.jsonl",
+        session,
+        line_index,
+        "p",
+        RecordedAction("Bash", {"command": "ls"}),
+        "old",
+        "/c",
+        "v",
+    )
+
+
+def test_batch_runs_each_candidate_next_to_its_own_noise_attempts() -> None:
+    """The K+1 calls for one cut share an identical prefix, so running them back to
+    back is what makes prompt caching hit."""
+    from claude_drift.cli import _batch_items_by_session
+
+    cuts = [make_cut("s1", 1), make_cut("s1", 2)]
+    items = [(c, "new", "candidate", 0) for c in cuts]
+    items += [(c, "old", "noise", a) for c in cuts for a in range(2)]
+    batches = _batch_items_by_session(items)
+    assert len(batches) == 1
+    assert [(it[0].line_index, it[2], it[3]) for it in batches[0]] == [
+        (1, "candidate", 0),
+        (1, "noise", 0),
+        (1, "noise", 1),
+        (2, "candidate", 0),
+        (2, "noise", 0),
+        (2, "noise", 1),
+    ]
+
+
+def test_batch_keeps_one_session_per_worker() -> None:
+    from claude_drift.cli import _batch_items_by_session
+
+    items = [
+        (make_cut("s2", 1), "new", "candidate", 0),
+        (make_cut("s1", 1), "new", "candidate", 0),
+    ]
+    batches = _batch_items_by_session(items)
+    assert [b[0][0].session_id for b in batches] == ["s1", "s2"]
+
+
+def test_run_replay_records_every_self_replay_attempt(
+    projects_dir: Path, drift_home: Path
+) -> None:
+    run = run_replay(
+        from_model="opus-5",
+        to_model="new",
+        turns=10,
+        workers=1,
+        noise=True,
+        project=None,
+        seed=0,
+        timeout=1.0,
+        runner=ScriptedRunner(),
+        echo=lambda s: None,
+        self_replays=3,
+    )
+    cuts = run.read_cuts()
+    replays = run.read_replays()
+    assert run.read_manifest()["self_replays"] == 3
+    assert len(replays) == len(cuts) * 4  # 1 candidate + 3 noise attempts per cut
+    noise = [r for r in replays if r.role == "noise"]
+    assert sorted(r.attempt for r in noise) == sorted(list(range(3)) * len(cuts))
+    assert all(r.attempt == 0 for r in replays if r.role == "candidate")
+
+
+def test_cli_replay_self_replays_option_counts_replays(
+    projects_dir: Path, drift_home: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import claude_drift.cli as cli
+
+    pretend_claude_installed(monkeypatch)
+    monkeypatch.setattr(cli, "SubprocessRunner", ScriptedRunner)
+    result = CliRunner().invoke(
+        main,
+        ["replay", "--from", "opus-5", "--to", "new", "--turns", "2",
+         "--self-replays", "2", "--yes"],
+    )
+    assert result.exit_code == 0, result.output
+    assert "cuts: 2  replays: 6" in result.output  # 2 * (1 candidate + 2 noise)
+    lr = latest_run()
+    assert lr is not None and lr.read_manifest()["self_replays"] == 2
+
+
+def test_cli_replay_self_replays_defaults_to_one() -> None:
+    from claude_drift.cli import replay
+
+    param = next(p for p in replay.params if p.name == "self_replays")
+    assert param.default == 1
+
+
+def test_pending_targets_covers_every_self_replay_attempt() -> None:
+    from claude_drift.cli import _pending_targets
+
+    cuts = [make_cut("s1", 1)]
+    manifest = {"to": "new", "from": "old", "noise": True, "self_replays": 3}
+    done = [
+        ReplayResult("s1:1", "new", "candidate", None, None, {}, None, 1, 0),
+        ReplayResult("s1:1", "old", "noise", None, None, {}, None, 1, 0),
+        ReplayResult("s1:1", "old", "noise", None, None, {}, "boom", 1, 1),
+    ]
+    pending = _pending_targets(cuts, done, manifest)
+    assert [(m, role, a) for _, m, role, a in pending] == [("old", "noise", 1), ("old", "noise", 2)]
+
+
+def test_pending_targets_defaults_to_one_attempt_for_old_manifests() -> None:
+    from claude_drift.cli import _pending_targets
+
+    cuts = [make_cut("s1", 1)]
+    manifest = {"to": "new", "from": "old", "noise": True}
+    pending = _pending_targets(cuts, [], manifest)
+    assert [(role, a) for _, _, role, a in pending] == [("candidate", 0), ("noise", 0)]

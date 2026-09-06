@@ -242,3 +242,53 @@ def test_bootstrap_resamples_sessions_not_rows() -> None:
     s = compute(cuts, replays, seed=0)
     assert s.sessions == 2 and s.noise_agreement == 0.5
     assert s.noise_band == Interval(0.0, 1.0)
+
+
+def noise_attempt(i: int, attempt: int, sig: ActionSignature | None, error: str | None = None):  # type: ignore[no-untyped-def]
+    return ReplayResult(f"s{i % 5}:{i}", "old", "noise", sig, None, {}, error, 1, attempt)
+
+
+def test_self_agreement_is_one_when_every_attempt_matches() -> None:
+    cuts = [cut(i) for i in range(3)]
+    replays = [rep(i, "candidate", BASH) for i in range(3)]
+    replays += [noise_attempt(i, a, BASH) for i in range(3) for a in range(3)]
+    s = compute(cuts, replays, seed=0)
+    assert s.self_replays == 3
+    assert s.self_agreement == 1.0
+    assert s.self_band == Interval(1.0, 1.0)
+    assert s.noise_agreement == 1.0  # attempt 0 vs the record, unchanged semantics
+
+
+def test_self_agreement_is_zero_when_no_two_attempts_match() -> None:
+    third = ActionSignature("Grep", "local-read", None, False)
+    cuts = [cut(i) for i in range(3)]
+    replays = [rep(i, "candidate", BASH) for i in range(3)]
+    for i in range(3):
+        replays += [
+            noise_attempt(i, 0, BASH),
+            noise_attempt(i, 1, READ),
+            noise_attempt(i, 2, third),
+        ]
+    s = compute(cuts, replays, seed=0)
+    assert s.self_replays == 3
+    assert s.self_agreement == 0.0
+
+
+def test_cut_with_one_successful_attempt_is_excluded_from_the_self_mean() -> None:
+    cuts = [cut(i) for i in range(2)]
+    replays = [rep(i, "candidate", BASH) for i in range(2)]
+    # cut 0 has two matching attempts; cut 1 has one success and one error
+    replays += [noise_attempt(0, 0, BASH), noise_attempt(0, 1, BASH)]
+    replays += [noise_attempt(1, 0, BASH), noise_attempt(1, 1, None, error="timeout")]
+    s = compute(cuts, replays, seed=0)
+    assert s.cuts == 2  # both cuts still have a usable attempt-0 noise row
+    assert s.self_agreement == 1.0  # the mean is over cut 0 only
+
+
+def test_self_agreement_is_none_without_repeated_attempts() -> None:
+    cuts = [cut(i) for i in range(5)]
+    replays = [rep(i, "candidate", BASH) for i in range(5)]
+    replays += [rep(i, "noise", BASH) for i in range(5)]
+    s = compute(cuts, replays)
+    assert s.self_replays == 1
+    assert s.self_agreement is None and s.self_band is None
