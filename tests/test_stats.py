@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from claude_drift.classify import TEXT_ONLY
 from claude_drift.models import ActionSignature, CutPoint, RecordedAction, ReplayResult
 from claude_drift.stats import Interval, compute
 
@@ -22,9 +23,15 @@ def cut(i: int, tool: str = "Bash", cmd: str = "ls") -> CutPoint:
     )
 
 
-def rep(i: int, role: str, sig: ActionSignature | None, error: str | None = None) -> ReplayResult:
+def rep(
+    i: int,
+    role: str,
+    sig: ActionSignature | None,
+    error: str | None = None,
+    raw: dict[str, object] | None = None,
+) -> ReplayResult:
     return ReplayResult(
-        f"s{i % 5}:{i}", "new" if role == "candidate" else "old", role, sig, None, {}, error, 1
+        f"s{i % 5}:{i}", "new" if role == "candidate" else "old", role, sig, raw, {}, error, 1
     )
 
 
@@ -174,3 +181,29 @@ def test_last_non_error_replay_wins() -> None:
     ]
     s = compute(cuts, success_then_error)
     assert s.cuts == 1 and s.errors == 0 and s.skipped == 0
+
+
+BASH_WRITE = ActionSignature("Bash", "local-write", None, False)
+
+
+def test_stored_signatures_are_reclassified_from_raw_tool_use() -> None:
+    # The stored signature was written by an older classifier that called every `>` a
+    # write. The raw tool input is the record of what the model actually proposed, so
+    # the current classifier is re-run over it at report time.
+    raw = {"name": "Bash", "input": {"command": "cat a 2>/dev/null"}}
+    cuts = [cut(i) for i in range(10)]
+    replays = [rep(i, "candidate", BASH_WRITE, raw=raw) for i in range(10)]
+    replays += [rep(i, "noise", BASH) for i in range(10)]
+    s = compute(cuts, replays)
+    assert s.candidate_agreement == 1.0
+    assert s.transitions == []
+
+
+def test_stored_signature_is_kept_when_there_is_no_raw_tool_use() -> None:
+    # text-only turns and errors carry no raw_tool_use; their stored signature stands
+    cuts = [cut(i) for i in range(10)]
+    replays = [rep(i, "candidate", TEXT_ONLY) for i in range(10)]
+    replays += [rep(i, "noise", BASH) for i in range(10)]
+    s = compute(cuts, replays)
+    assert s.candidate_agreement == 0.0
+    assert s.transitions[0].dst == "text"

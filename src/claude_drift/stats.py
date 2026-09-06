@@ -6,7 +6,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from functools import partial
 
-from claude_drift.classify import agree, signature_of_recorded
+from claude_drift.classify import agree, signature, signature_of_recorded
 from claude_drift.models import ActionSignature, CutPoint, ReplayResult
 
 FLAG_TARGETS = {"local-write", "delegate"}
@@ -72,6 +72,23 @@ def _bootstrap(
     return Interval(_percentile(samples, alpha / 2), _percentile(samples, 1 - alpha / 2))
 
 
+def _classify(r: ReplayResult, cwd: str) -> ActionSignature | None:
+    """Re-run the current classifier over the raw tool input the replay recorded.
+
+    `ReplayResult.signature` was computed when the replay ran, so a classifier fix
+    would never reach a stored run. The raw tool use is the durable record of what
+    the model proposed; text-only turns and errors have none, and keep what was stored.
+    """
+    raw = r.raw_tool_use
+    if raw is None:
+        return r.signature
+    name = raw.get("name")
+    if not isinstance(name, str):
+        return r.signature
+    tool_input = raw.get("input")
+    return signature(name, dict(tool_input) if isinstance(tool_input, dict) else {}, cwd)
+
+
 def _rows(
     cuts: list[CutPoint], replays: list[ReplayResult]
 ) -> tuple[list[_Row], int, int, bool]:
@@ -105,8 +122,8 @@ def _rows(
             _Row(
                 c.session_id,
                 signature_of_recorded(c.recorded, c.cwd),
-                cand.signature,
-                noi.signature if noi else None,
+                _classify(cand, c.cwd) or cand.signature,
+                _classify(noi, c.cwd) if noi else None,
             )
         )
     return rows, errors, skipped, noise_on
