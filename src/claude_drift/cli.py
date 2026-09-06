@@ -56,6 +56,7 @@ def scan(project: str | None) -> None:
 
 
 TOKENS_PER_CUT_ESTIMATE = 100_000
+SECONDS_PER_REPLAY_ESTIMATE = 37
 ABORT_ERROR_RATE = 0.20
 ABORT_MIN_COMPLETED = 5
 
@@ -270,7 +271,7 @@ def run_replay(
     required=True,
     help="Model to replay with, passed to `claude --model`.",
 )
-@click.option("--turns", default=60, show_default=True, type=int)
+@click.option("--turns", default=30, show_default=True, type=int)
 @click.option(
     "--per-session",
     "per_session",
@@ -330,8 +331,13 @@ def replay(
             per_session=per_session,
         )
     )
-    est = n * (2 if noise else 1) * TOKENS_PER_CUT_ESTIMATE
-    click.echo(f"cuts: {n}  replays: {n * (2 if noise else 1)}  estimated input tokens: {est:,}")
+    n_replays = n * (2 if noise else 1)
+    est = n_replays * TOKENS_PER_CUT_ESTIMATE
+    est_minutes = n_replays * SECONDS_PER_REPLAY_ESTIMATE / workers / 60
+    click.echo(
+        f"cuts: {n}  replays: {n_replays}  estimated input tokens: {est:,}"
+        f"  ~{est_minutes:.0f} min"
+    )
     if not yes:
         click.confirm("continue?", abort=True)
     run = run_replay(

@@ -131,11 +131,19 @@ def test_cli_replay_dry_estimate_and_yes(projects_dir: Path, drift_home: Path, m
     )
     assert result.exit_code == 0, result.output
     assert "estimated input tokens" in result.output
+    assert "min" in result.output  # wall-clock estimate alongside the token estimate
     assert "run id:" in result.output
     # the run-level count of failed replays, distinct from the report's `errors:` line
     assert "failed replays: 0" in result.output
     lr = latest_run()
     assert lr is not None and len(lr.read_cuts()) == 2
+
+
+def test_cli_replay_turns_default_is_30() -> None:
+    from claude_drift.cli import replay
+
+    turns_param = next(p for p in replay.params if p.name == "turns")
+    assert turns_param.default == 30
 
 
 def test_cli_replay_requires_the_claude_binary(

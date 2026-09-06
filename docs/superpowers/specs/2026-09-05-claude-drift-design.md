@@ -57,7 +57,7 @@ NOISE (within band, ignore)
 | `drift report [--run ID] [--format text\|md]` | 저장된 결과로 리포트 생성 | 없음 |
 
 - `--from`은 기록된 모델이다. 기록 모델이 다른 세션은 제외한다.
-- `--turns` 기본 60, `--workers` 기본 4.
+- `--turns` 기본 30, `--workers` 기본 4.
 - 배포: `uvx claude-drift`. 패키지명 `claude-drift`, 진입점 `drift`.
 
 ## 5. 아키텍처

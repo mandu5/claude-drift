@@ -27,9 +27,13 @@ work once the first release is published.
 
 ```bash
 drift scan                                   # what is replayable on this machine (no model calls)
-drift replay --from opus-5 --to sonnet-5     # replay 60 sampled turns with both models
+drift replay --from opus-5 --to sonnet-5     # replay 30 sampled turns with both models
 drift report                                 # re-render the last run (no model calls)
+drift resume                                 # finish the replays a cut-off run left pending
 ```
+
+A 60-turn run with the noise pass sent about 25M input tokens on the author's machine; 30 turns
+is the default so one run fits inside a subscription window. Use `drift resume` if a run is cut off.
 
 Example output: see [docs/examples/first-report.md](docs/examples/first-report.md).
 
@@ -37,7 +41,7 @@ Example output: see [docs/examples/first-report.md](docs/examples/first-report.m
 
 | option | default | what it does |
 |---|---|---|
-| `--turns N` | 60 | How many recorded turns to sample and replay. |
+| `--turns N` | 30 | How many recorded turns to sample and replay. |
 | `--per-session N` | 3 | Max cuts sampled from one session. |
 | `--workers N` | 4 | Replays in flight at once. Sessions are batched so one worker owns a session. |
 | `--no-noise` | off | Skip the old-model replay. Faster and half the cost, but no noise band and no verdict. |
@@ -58,7 +62,7 @@ session copies are always removed; the run is marked `interrupted`.
 ## How it works
 
 1. **ingest** — finds human prompts in your session logs that were followed by a tool call.
-2. **sample** — picks up to 60 turns, stratified by tool, at most 3 per session, seeded.
+2. **sample** — picks up to 30 turns, stratified by tool, at most 3 per session, seeded.
 3. **replay** — writes a truncated copy of the session next to the original under a temporary id
    and runs `claude -p --resume <id> --fork-session --model <new> --max-turns 1`. The primary
    guarantee that nothing runs is the stop itself: the stream is read only up to the first
@@ -80,7 +84,7 @@ session copies are always removed; the run is marked `interrupted`.
 ## Cost
 
 Each replayed turn sends the session prefix again (typically 30k–100k tokens, mostly cached).
-Default settings replay 60 turns twice. `drift replay` prints an estimate and asks before starting.
+Default settings replay 30 turns twice. `drift replay` prints an estimate and asks before starting.
 
 ## Limits
 
