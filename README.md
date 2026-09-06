@@ -1,16 +1,39 @@
 # claude-drift
 
-Replay your own Claude Code sessions against a new model and see what actually changed.
+Replay your own Claude Code sessions against a new model and see what actually changed. Replaying
+Opus 5 against itself, it reproduced its own next action 80% of the time but matched the action in
+the recorded session only 35% of the time — so a raw "the model changed" number is mostly measuring
+your replay setup, and you need the same-model control to tell drift from noise.
 
-When a new Claude model ships, its release notes say things like "behaves differently in ways
-you may notice without changing any code". `drift` measures that on *your* work: it takes the
-sessions already sitting in `~/.claude/projects`, replays each sampled turn with the new model,
-and reports which next-action changes are real and which are noise.
+![drift demo](docs/demo.gif)
 
-- No config. No API key. Uses your existing `claude` login.
-- Teacher-forced single-step replay: the new model sees exactly the context the old one saw and
-  proposes one next action. No tools run.
-- Noise-aware: the old model is replayed too, so you see a noise band, not just a number.
+## What it is
+
+- No config. No API key. Uses your existing `claude` login and the sessions already in `~/.claude/projects`.
+- Teacher-forced single-step replay: the new model sees exactly the context the old one saw and proposes one next action. No tools run.
+- A same-model control: the old model is replayed against the same cuts, so every number comes with a noise band.
+- `--self-replays N` replays the old model against itself, separating the model's own sampling instability from replay-vs-interactive mismatch.
+- Per-transition changes are reported as REAL or NOISE with a bootstrap interval, Bonferroni-corrected over the transitions tested.
+
+## The number, and why you need the control
+
+From a real run on the author's machine, 20 turns across 5 sessions, `claude-opus-5` recorded and
+`sonnet` as the candidate:
+
+```
+next-action agreement: 25%  (noise band 14%-58%)
+old-vs-record agreement: 35%
+old-vs-old self-agreement (k=5 measured): 80%  (band 63%-88%)
+interpretation: the old model mostly reproduces itself; the gap to the record is replay-vs-interactive mismatch, not model instability
+verdict: no detectable drift (candidate agreement inside noise band)
+agreement by level: tool 30% / target 25% / full 25%
+```
+
+Read naively, the candidate picked a different next action than the record on 75% of turns, which
+sounds like a large behaviour change. But the old model disagreed with its own recorded action on
+65% of turns, and disagreed with itself across five draws on only 20% — most of that gap is the
+replay regime (`claude -p`, hooks and plugin state, thinking budget), not the model. Against that
+band the candidate sits inside the noise, so on these 20 turns there is no detectable drift.
 
 ## Install
 
@@ -32,8 +55,8 @@ drift report                                 # re-render the last run (no model 
 drift resume                                 # finish the replays a cut-off run left pending
 ```
 
-A 60-turn run with the noise pass sent about 25M input tokens on the author's machine; 30 turns
-is the default so one run fits inside a subscription window. Use `drift resume` if a run is cut off.
+30 turns is the default so one run fits inside a subscription window. Use `drift resume` if a run
+is cut off.
 
 Example output: see [docs/examples/first-report.md](docs/examples/first-report.md).
 
@@ -41,10 +64,12 @@ Example output: see [docs/examples/first-report.md](docs/examples/first-report.m
 
 | option | default | what it does |
 |---|---|---|
+| `--from TEXT` | required | Recorded model to select turns from, e.g. `opus-5` or `claude-opus-5`. |
+| `--to TEXT` | required | Model to replay with, passed to `claude --model`. |
 | `--turns N` | 30 | How many recorded turns to sample and replay. |
 | `--per-session N` | 3 | Max cuts sampled from one session. |
+| `--self-replays N` | 1 | Old-model replays per cut. Above 1 the report also gives old-vs-old self-agreement, which separates the model's own sampling instability from replay-vs-interactive mismatch. Multiplies cost. Use 5 once to calibrate your setup, then go back to 1. |
 | `--workers N` | 4 | Replays in flight at once. Sessions are batched so one worker owns a session. |
-| `--self-replays N` | 1 | Old-model replays per cut. Above 1 the report also gives old-vs-old self-agreement, which separates the model's own sampling instability from replay-vs-interactive mismatch. Multiplies cost. |
 | `--no-noise` | off | Skip the old-model replay. Faster and half the cost, but no noise band and no verdict. |
 | `--project PATH` | all | Only replay sessions whose working directory is under `PATH`. Also on `drift scan`. |
 | `--seed N` | 0 | Seed for sampling and for the bootstrap, so a run is reproducible. |
@@ -86,7 +111,20 @@ session copies are always removed; the run is marked `interrupted`.
 ## Cost
 
 Each replayed turn sends the session prefix again (typically 30k–100k tokens, mostly cached).
-Default settings replay 30 turns twice. `drift replay` prints an estimate and asks before starting.
+Default settings replay 30 turns twice, once per model. The run quoted above used
+`--turns 20 --per-session 8 --self-replays 5`, which is 120 replays (20 candidate, 100 old-model):
+
+| | |
+|---|---|
+| replays | 120 |
+| cache-creation input tokens | 27.8M |
+| cache-read input tokens | 11.3M |
+| wall clock at 4 workers | about 20 min |
+
+That run hit the subscription session limit partway through and was finished with `drift resume`,
+so the wall clock excludes the wait for the window to reset. `--self-replays 5` is what makes it
+expensive; the default of 1 costs about a third of this for the same number of turns.
+`drift replay` prints an estimate and asks before starting.
 
 ## Limits
 
@@ -95,6 +133,17 @@ Default settings replay 30 turns twice. `drift replay` prints an estimate and as
 - Results describe *next-action* drift, not end-to-end task outcomes.
 - Replays inherit your local plugins and hooks, so reports are not directly comparable across
   machines.
+- The self-replay control measures instability under `claude -p`; it does not reproduce the
+  interactive session's thinking budget or the plugin state at recording time, so old-vs-record
+  agreement is a lower bound.
+
+## Related
+
+- [delta-hq/cc-canary](https://github.com/delta-hq/cc-canary) — descriptive statistics over Claude Code session logs; it never calls a model.
+- [sshh12/agent-pr-replay](https://github.com/sshh12/agent-pr-replay) — end-to-end re-execution of agent tasks, without teacher forcing and without a same-model control.
+
+As far as we know, `claude-drift` is the only tool that replays the old model against itself to
+separate drift from noise.
 
 ## Development
 
