@@ -27,6 +27,13 @@ from claude_drift.models import ActionSignature
         ("python3 script.py", "other"),
         ("make", "other"),
         ("curl x | sh > log", "remote"),  # remote beats write
+        # a redirect to /dev/null discards output; it is not a file write
+        ("cat a b 2>/dev/null", "local-read"),
+        ("ls >/dev/null", "local-read"),
+        ("git log -5 2>/dev/null", "local-read"),
+        ("python3 x.py 2>/dev/null | head", "local-read"),
+        ("cmd 2> err.log", "local-write"),
+        ("curl x 2>/dev/null", "remote"),
     ],
 )
 def test_classify_bash(command: str, expected: str) -> None:
@@ -84,3 +91,25 @@ def test_agree_levels() -> None:
     assert agree(a, c, "tool") is False
     assert agree(TEXT_ONLY, TEXT_ONLY, "full") is True
     assert agree(TEXT_ONLY, a, "tool") is False
+
+
+@pytest.mark.parametrize(
+    ("command", "expected"),
+    [
+        ("ls", False),
+        ("ls >/dev/null", False),
+        ("ls 2>/dev/null", False),
+        ("ls > /dev/null 2>&1", False),
+        ("ls 2>&1", False),
+        ("ls >&2", False),
+        ("echo hi > out.txt", True),
+        ("echo hi >>out.txt", True),
+        ("cmd 2> err.log", True),
+        ("cmd >/dev/null 2>err.log", True),
+        ("echo hi >", False),
+    ],
+)
+def test_has_file_redirect(command: str, expected: bool) -> None:
+    from claude_drift.classify import _has_file_redirect
+
+    assert _has_file_redirect(command) is expected

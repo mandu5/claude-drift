@@ -31,7 +31,21 @@ READ_GIT = {
     "log", "status", "diff", "show", "branch", "blame", "rev-parse", "rev-list", "remote",
     "ls-files",
 }
-REDIRECT = re.compile(r"(?<![<>])>{1,2}(?!&)")
+# A redirect, with its file-descriptor prefix and its target: `2>/dev/null`, `>>out.txt`.
+# `(?!&)` skips fd duplications like `2>&1`, which write no file.
+REDIRECT = re.compile(r"(?<![<>&])(\d*)>{1,2}(?!&)\s*(\S*)")
+DISCARD = "/dev/null"
+
+
+def _has_file_redirect(command: str) -> bool:
+    """True if `command` redirects into a file. Discarding into /dev/null does not count.
+
+    `cat x 2>/dev/null` and `ls >/dev/null` are reads, not writes; treating every `>`
+    as a write made them look like local-writes and dominated the transition table.
+    """
+    return any(
+        m.group(2) and m.group(2) != DISCARD for m in REDIRECT.finditer(command)
+    )
 
 
 def _segments(command: str) -> list[list[str]]:
@@ -78,7 +92,7 @@ def _segment_class(seg: list[str]) -> str:
 
 def classify_bash(command: str) -> str:
     classes = {_segment_class(s) for s in _segments(command)}
-    if REDIRECT.search(command):
+    if _has_file_redirect(command):
         classes.add("local-write")
     if "remote" in classes:
         return "remote"
