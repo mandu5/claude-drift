@@ -34,6 +34,11 @@ from claude_drift.models import ActionSignature
         ("python3 x.py 2>/dev/null | head", "local-read"),
         ("cmd 2> err.log", "local-write"),
         ("curl x 2>/dev/null", "remote"),
+        ("cmd &> out.log", "local-write"),
+        ("cmd &>> out.log", "local-write"),
+        ("ls >/dev/null;echo hi", "local-read"),
+        ("(cd x && ls >/dev/null)", "local-read"),
+        ("ls >/dev/null&", "local-read"),
     ],
 )
 def test_classify_bash(command: str, expected: str) -> None:
@@ -107,6 +112,13 @@ def test_agree_levels() -> None:
         ("cmd 2> err.log", True),
         ("cmd >/dev/null 2>err.log", True),
         ("echo hi >", False),
+        ("cmd &> out.log", True),
+        ("cmd &>> out.log", True),
+        ("cmd &>/dev/null", False),
+        ("ls >/dev/null;echo hi", False),
+        ("(cd x && ls >/dev/null)", False),
+        ("ls >/dev/null&", False),
+        ("ls >/dev/null|cat", False),
     ],
 )
 def test_has_file_redirect(command: str, expected: bool) -> None:

@@ -72,15 +72,15 @@ def test_systematic_shift_is_real_and_noise_shift_is_not() -> None:
 
 
 def test_equal_noise_and_candidate_shift_is_not_real() -> None:
+    # Both replays disagree with the record on the same cuts, so the difference is 0.
+    # The disagreements sit in two of the five sessions, so resampling sessions actually
+    # moves the agreement and the band is a real interval around 0.6.
     cuts = [cut(i) for i in range(40)]
-    # both replays disagree with the record on the same 10 cuts -> difference is 0
-    replays = [rep(i, "candidate", READ if i < 10 else BASH) for i in range(40)]
-    replays += [rep(i, "noise", READ if i < 10 else BASH) for i in range(40)]
+    replays = [rep(i, "candidate", READ if i % 5 < 2 else BASH) for i in range(40)]
+    replays += [rep(i, "noise", READ if i % 5 < 2 else BASH) for i in range(40)]
     s = compute(cuts, replays, seed=0)
-    assert s.candidate_agreement == 0.75 and s.noise_agreement == 0.75
-    # The band is clustered by session and this fixture spreads the 10 disagreements
-    # evenly over all 5 sessions, so every resample of sessions lands on 0.75 exactly.
-    assert s.noise_band is not None and s.noise_band.low <= 0.75 <= s.noise_band.high
+    assert s.candidate_agreement == 0.6 and s.noise_agreement == 0.6
+    assert s.noise_band is not None and s.noise_band.low < 0.6 < s.noise_band.high
     t = s.transitions[0]
     assert t.delta == 0 and t.real is False
 
@@ -256,7 +256,7 @@ def test_self_agreement_is_one_when_every_attempt_matches() -> None:
     assert s.self_replays == 3
     assert s.self_agreement == 1.0
     assert s.self_band == Interval(1.0, 1.0)
-    assert s.noise_agreement == 1.0  # attempt 0 vs the record, unchanged semantics
+    assert s.noise_agreement == 1.0  # one draw vs the record, unchanged semantics
 
 
 def test_self_agreement_is_zero_when_no_two_attempts_match() -> None:
@@ -283,6 +283,35 @@ def test_cut_with_one_successful_attempt_is_excluded_from_the_self_mean() -> Non
     s = compute(cuts, replays, seed=0)
     assert s.cuts == 2  # both cuts still have a usable attempt-0 noise row
     assert s.self_agreement == 1.0  # the mean is over cut 0 only
+
+
+def test_self_band_ignores_sessions_with_nothing_to_measure() -> None:
+    # Session s0 has two agreeing attempts per cut; session s1 has one attempt per cut and
+    # so contributes no self rate. Resampling s1 must not drag the band down to 0.
+    cuts = [cut(i) for i in range(10)]
+    replays = [rep(i, "candidate", BASH) for i in range(10)]
+    for i in range(10):
+        replays.append(noise_attempt(i, 0, BASH))
+        if i % 5 == 0:  # session s0 only
+            replays.append(noise_attempt(i, 1, BASH))
+    s = compute(cuts, replays, seed=0)
+    assert s.sessions == 5
+    assert s.self_agreement == 1.0
+    assert s.self_band == Interval(1.0, 1.0)
+
+
+def test_noise_draw_falls_back_to_the_first_successful_attempt() -> None:
+    # attempt 0 errored but attempt 1 succeeded: the cut still has an old-model draw and
+    # must not be dropped from the row set.
+    cuts = [cut(0)]
+    replays = [
+        rep(0, "candidate", BASH),
+        noise_attempt(0, 0, None, error="session limit"),
+        noise_attempt(0, 1, BASH),
+    ]
+    s = compute(cuts, replays, seed=0)
+    assert s.cuts == 1 and s.errors == 0 and s.skipped == 0
+    assert s.noise_agreement == 1.0
 
 
 def test_self_agreement_is_none_without_repeated_attempts() -> None:

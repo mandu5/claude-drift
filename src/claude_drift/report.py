@@ -37,10 +37,15 @@ def _verdict(stats: DriftStats) -> str:
         return "no detectable drift (candidate agreement inside noise band)"
     if stats.candidate_agreement < band.low:
         return "drift detected (candidate agreement below noise band)"
-    return "candidate agrees MORE than old model with itself (above noise band)"
+    return (
+        "candidate agrees with the record MORE than the old model does (above noise band)"
+    )
 
 
 SELF_GAP = 0.20
+SELF_LOW = 0.5
+
+NOISE_COLUMN = "noise column = one old-model draw per turn (first successful attempt)"
 
 REPRODUCES = (
     "interpretation: the old model mostly reproduces itself; the gap to the record is "
@@ -49,6 +54,10 @@ REPRODUCES = (
 UNSTABLE = (
     "interpretation: the old model does not reproduce itself either; the turns "
     "themselves are unstable"
+)
+COMPARABLE = (
+    "interpretation: self-agreement and agreement with the record are comparable and "
+    "both high; the model is stable on these turns"
 )
 BELOW_RECORD = (
     "interpretation: self-agreement is lower than agreement with the record; "
@@ -68,9 +77,14 @@ def _self_lines(stats: DriftStats) -> list[str]:
         return []
     gap = self_agreement - stats.noise_agreement
     if gap > SELF_GAP:
+        # the model reproduces itself much better than it reproduces the record
         interpretation = REPRODUCES
-    elif abs(gap) <= SELF_GAP:
+    elif self_agreement < SELF_LOW:
+        # only call the turns unstable when self-agreement is low in absolute terms;
+        # a small gap between two high numbers means the opposite
         interpretation = UNSTABLE
+    elif abs(gap) <= SELF_GAP:
+        interpretation = COMPARABLE
     else:
         interpretation = BELOW_RECORD
     band = (
@@ -79,7 +93,8 @@ def _self_lines(stats: DriftStats) -> list[str]:
         else f"  (band {_pct(stats.self_band.low)}-{_pct(stats.self_band.high)})"
     )
     return [
-        f"old-vs-old self-agreement (k={stats.self_replays}): {_pct(self_agreement)}{band}",
+        f"old-vs-old self-agreement (k={stats.self_replays} measured): "
+        f"{_pct(self_agreement)}{band}",
         interpretation,
     ]
 
@@ -93,6 +108,7 @@ def _header_lines(stats: DriftStats) -> list[str]:
         f"errors: {stats.errors}   skipped: {stats.skipped}",
         f"next-action agreement: {_pct(stats.candidate_agreement)}  {_band(stats.noise_band)}",
         f"old-vs-record agreement: {noise}",
+        NOISE_COLUMN,
         *_self_lines(stats),
         f"verdict: {_verdict(stats)}",
         f"agreement by level: tool {_pct(stats.candidate_agreement_tool)} / "

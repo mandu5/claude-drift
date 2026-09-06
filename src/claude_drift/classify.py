@@ -31,9 +31,11 @@ READ_GIT = {
     "log", "status", "diff", "show", "branch", "blame", "rev-parse", "rev-list", "remote",
     "ls-files",
 }
-# A redirect, with its file-descriptor prefix and its target: `2>/dev/null`, `>>out.txt`.
-# `(?!&)` skips fd duplications like `2>&1`, which write no file.
-REDIRECT = re.compile(r"(?<![<>&])(\d*)>{1,2}(?!&)\s*(\S*)")
+# A redirect, with its file-descriptor prefix and its target: `2>/dev/null`, `>>out.txt`,
+# `&> log`. `(?!&)` skips fd duplications like `2>&1`, which write no file, and the
+# target stops at the shell metacharacters that end a word, so `>/dev/null;echo hi`
+# and `(cd x && ls >/dev/null)` still read as /dev/null rather than as a filename.
+REDIRECT = re.compile(r"(?<![<>])(\d*|&)>{1,2}(?!&)\s*([^\s;&|)]*)")
 DISCARD = "/dev/null"
 
 

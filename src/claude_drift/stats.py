@@ -66,7 +66,7 @@ def _percentile(values: list[float], q: float) -> float:
 
 def _bootstrap(
     rows: list[_Row],
-    stat: Callable[[list[_Row]], float],
+    stat: Callable[[list[_Row]], float | None],
     rng: random.Random,
     n_boot: int,
     alpha: float = ALPHA,
@@ -76,6 +76,9 @@ def _bootstrap(
     Turns from one session share a repo, a task and a CLAUDE.md, so they are not
     independent draws. Resampling turns treats every turn as its own evidence and
     reports a band far narrower than the data supports.
+
+    A statistic returns None for a resample it cannot be computed on, and those
+    resamples are dropped rather than counted as zero.
     """
     if not rows:
         return Interval(0.0, 0.0)
@@ -88,7 +91,11 @@ def _bootstrap(
         drawn: list[_Row] = []
         for _ in clusters:
             drawn.extend(clusters[rng.randrange(len(clusters))])
-        samples.append(stat(drawn))
+        value = stat(drawn)
+        if value is not None:
+            samples.append(value)
+    if not samples:
+        return Interval(0.0, 0.0)
     return Interval(_percentile(samples, alpha / 2), _percentile(samples, 1 - alpha / 2))
 
 
@@ -145,20 +152,22 @@ def _rows(
     for c in cuts:
         got = by_cut.get(c.cut_id, {})
         cand = got.get(("candidate", 0))
-        noi = got.get(("noise", 0))
-        missing_noise = noise_on and (noi is None or noi.signature is None)
+        # The old-model draw is the first attempt that succeeded, not strictly attempt 0:
+        # a cut whose attempt 0 errored but whose attempt 1 came back still has a draw.
+        tried = [got[("noise", a)] for a in range(self_replays) if ("noise", a) in got]
+        noi = next((r for r in tried if r.error is None and r.signature is not None), None)
+        missing_noise = noise_on and noi is None
         if cand is None or cand.signature is None or missing_noise:
-            if (cand is not None and cand.error) or (noi is not None and noi.error):
+            if (cand is not None and cand.error) or any(r.error for r in tried):
                 errors += 1
             else:
                 skipped += 1
             continue
         attempts = []
-        for a in range(self_replays):
-            got_a = got.get(("noise", a))
-            if got_a is None or got_a.error is not None:
+        for r in tried:
+            if r.error is not None:
                 continue
-            sig_a = _classify(got_a, c.cwd)
+            sig_a = _classify(r, c.cwd)
             if sig_a is not None:
                 attempts.append(sig_a)
         rows.append(
@@ -184,9 +193,14 @@ def _agreement(rows: list[_Row], which: str, level: str = "target") -> float:
     return hits / len(rows)
 
 
-def _self_agreement(rows: list[_Row]) -> float:
+def _self_agreement(rows: list[_Row]) -> float | None:
+    """Mean pairwise self-agreement over the cuts that have one. None when there is none.
+
+    Returning 0.0 for "nothing to measure" would be read as "the model never reproduces
+    itself", and inside the bootstrap it dragged the band down to zero.
+    """
     rates = [r.self_rate for r in rows if r.self_rate is not None]
-    return sum(rates) / len(rates) if rates else 0.0
+    return sum(rates) / len(rates) if rates else None
 
 
 def _transition_delta(rows: list[_Row], src: str, dst: str) -> float:
@@ -234,9 +248,13 @@ def compute(
         transitions.append(Transition(src, dst, cc, nc, delta, interval, real, flagged))
     transitions.sort(key=lambda t: (-t.candidate_count, t.src, t.dst))
 
-    measured_self = self_replays > 1 and any(r.self_rate is not None for r in rows)
+    # Sessions with no measurable cut carry no information about self-agreement, so they
+    # are left out of its bootstrap entirely rather than resampled as zeros.
+    measurable = {r.session for r in rows if r.self_rate is not None}
+    self_rows = [r for r in rows if r.session in measurable]
+    measured_self = self_replays > 1 and bool(measurable)
     self_agreement = _self_agreement(rows) if measured_self else None
-    self_band = _bootstrap(rows, _self_agreement, rng, n_boot) if measured_self else None
+    self_band = _bootstrap(self_rows, _self_agreement, rng, n_boot) if measured_self else None
     return DriftStats(
         cuts=len(rows),
         sessions=len({r.session for r in rows}),

@@ -528,3 +528,16 @@ def test_pending_targets_defaults_to_one_attempt_for_old_manifests() -> None:
     manifest = {"to": "new", "from": "old", "noise": True}
     pending = _pending_targets(cuts, [], manifest)
     assert [(role, a) for _, _, role, a in pending] == [("candidate", 0), ("noise", 0)]
+
+
+def test_cli_replay_rejects_self_replays_below_one(
+    projects_dir: Path, drift_home: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    pretend_claude_installed(monkeypatch)
+    result = CliRunner().invoke(
+        main,
+        ["replay", "--from", "opus-5", "--to", "new", "--self-replays", "0", "--yes"],
+    )
+    assert result.exit_code != 0
+    assert "--self-replays must be at least 1" in result.output
+    assert latest_run() is None  # refused before any run directory was created

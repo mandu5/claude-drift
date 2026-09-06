@@ -97,10 +97,12 @@ def _raise_sigterm(signum: int, frame: object) -> None:
     raise SystemExit(143)
 
 
-# Within one session batch, each cut's candidate replay runs immediately before that
-# cut's noise attempts. Those K+1 calls share an identical prompt prefix, so running
-# them back to back is what lets prompt caching hit; replaying all candidates first
-# and all noise afterwards re-created the cache for every call instead.
+# Within one session batch, the work is ordered per cut rather than per role: a cut's
+# candidate call, then that cut's K noise attempts. Those K noise attempts share both an
+# identical prompt prefix and the same model, so running them back to back is what lets
+# prompt caching hit; the earlier all-candidates-then-all-noise ordering separated them
+# by a whole session. The candidate call runs a different model and shares no cache with
+# them either way.
 _ROLE_ORDER = {"candidate": 0, "noise": 1}
 
 # (cut, model, role, attempt) - `attempt` indexes the K --self-replays of the old model.
@@ -328,6 +330,8 @@ def replay(
     Uses your claude login.
     """
     signal.signal(signal.SIGTERM, _raise_sigterm)
+    if self_replays < 1:
+        raise click.BadParameter("--self-replays must be at least 1")
     if shutil.which("claude") is None:
         raise click.ClickException(
             "claude binary not found on PATH; install Claude Code and log in first"

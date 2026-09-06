@@ -44,6 +44,7 @@ def test_render_text() -> None:
     assert "sessions replayed: 30   turns sampled: 60   errors: 1" in out
     assert "next-action agreement: 81%  (noise band 76%-88%)" in out
     assert "old-vs-record agreement: 83%" in out
+    assert "noise column = one old-model draw per turn (first successful attempt)" in out
     assert "self-agreement" not in out  # not measured with --self-replays 1
     assert "verdict: no detectable drift (candidate agreement inside noise band)" in out
     assert "agreement by level: tool 0% / target 81% / full 0%" in out
@@ -83,13 +84,14 @@ def test_render_self_agreement_and_interpretation() -> None:
         self_band=Interval(0.55, 0.70),
     )
     out = render(high, {"from": "a", "to": "b"})
-    assert "old-vs-old self-agreement (k=3): 62%  (band 55%-70%)" in out
+    assert "old-vs-old self-agreement (k=3 measured): 62%  (band 55%-70%)" in out
     assert (
         "interpretation: the old model mostly reproduces itself; the gap to the record "
         "is replay-vs-interactive mismatch, not model instability" in out
     )
-    assert "old-vs-old self-agreement (k=3): 62%" in render(high, {}, fmt="md")
+    assert "old-vs-old self-agreement (k=3 measured): 62%" in render(high, {}, fmt="md")
 
+    # self-agreement is close to agreement with the record, and both are low
     flat = replace(
         base,
         noise_agreement=0.19,
@@ -102,10 +104,40 @@ def test_render_self_agreement_and_interpretation() -> None:
         "themselves are unstable" in render(flat, {"from": "a", "to": "b"})
     )
 
-    low = replace(base, self_replays=3, self_agreement=0.40, self_band=Interval(0.3, 0.5))
+    # self-agreement is high in absolute terms and close to agreement with the record
+    comparable = replace(
+        base,
+        noise_agreement=0.83,
+        self_replays=3,
+        self_agreement=0.85,
+        self_band=Interval(0.8, 0.9),
+    )
+    assert (
+        "interpretation: self-agreement and agreement with the record are comparable "
+        "and both high; the model is stable on these turns"
+        in render(comparable, {"from": "a", "to": "b"})
+    )
+
+    # self-agreement is not low, but it is well below agreement with the record
+    low = replace(
+        base,
+        noise_agreement=0.90,
+        self_replays=3,
+        self_agreement=0.55,
+        self_band=Interval(0.45, 0.65),
+    )
     assert (
         "interpretation: self-agreement is lower than agreement with the record; "
         "inspect the run" in render(low, {"from": "a", "to": "b"})
+    )
+
+
+def test_verdict_above_the_band_names_the_record() -> None:
+    s = replace(stats_fixture(), candidate_agreement=0.95)
+    out = render(s, {"from": "a", "to": "b"})
+    assert (
+        "verdict: candidate agrees with the record MORE than the old model does "
+        "(above noise band)" in out
     )
 
 
