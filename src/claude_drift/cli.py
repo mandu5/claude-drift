@@ -8,6 +8,7 @@ from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from datetime import datetime
+from pathlib import Path
 from typing import Any
 
 import click
@@ -42,7 +43,9 @@ def scan(project: str | None) -> None:
     root = projects_root()
     cuts = ingest(root, project=project)
     sessions = {c.session_id for c in cuts}
-    click.echo(f"projects root: {root}")
+    home = str(Path.home())
+    shown = "~" + str(root)[len(home) :] if str(root).startswith(home) else str(root)
+    click.echo(f"projects root: {shown}")
     click.echo(f"sessions with replayable cuts: {len(sessions)}")
     click.echo(f"replayable cuts: {len(cuts)}")
     if not cuts:
@@ -353,8 +356,7 @@ def replay(
     est = n_replays * TOKENS_PER_CUT_ESTIMATE
     est_minutes = n_replays * SECONDS_PER_REPLAY_ESTIMATE / workers / 60
     click.echo(
-        f"cuts: {n}  replays: {n_replays}  estimated input tokens: {est:,}"
-        f"  ~{est_minutes:.0f} min"
+        f"cuts: {n}  replays: {n_replays}  estimated input tokens: {est:,}  ~{est_minutes:.0f} min"
     )
     if not yes:
         click.confirm("continue?", abort=True)
@@ -373,9 +375,7 @@ def replay(
         self_replays=self_replays,
     )
     m = run.read_manifest()
-    click.echo(
-        f"status: {m['status']}  completed: {m['completed']}  failed replays: {m['errors']}"
-    )
+    click.echo(f"status: {m['status']}  completed: {m['completed']}  failed replays: {m['errors']}")
     click.echo(f"run id: {run.path.name}")
     click.echo()
     click.echo(build_report(run), nl=False)
