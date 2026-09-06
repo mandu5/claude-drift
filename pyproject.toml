@@ -6,6 +6,23 @@ readme = "README.md"
 license = { text = "MIT" }
 requires-python = ">=3.11"
 dependencies = ["click>=8.1"]
+keywords = ["claude", "claude-code", "llm", "evaluation", "drift", "regression"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Software Development :: Testing",
+]
+
+[project.urls]
+Homepage = "https://github.com/mandu5/claude-drift"
+Repository = "https://github.com/mandu5/claude-drift"
+Issues = "https://github.com/mandu5/claude-drift/issues"
 
 [project.scripts]
 drift = "claude_drift.cli:main"

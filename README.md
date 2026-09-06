@@ -111,6 +111,16 @@ The live probe that shells out to a real `claude` process is opt-in:
 DRIFT_LIVE=1 uv run pytest tests/test_replay_live.py -s
 ```
 
+### Releasing
+
+```bash
+git tag v0.1.0 && git push --tags
+```
+
+A `v*` tag runs `.github/workflows/publish.yml`, which builds the wheel and uploads it to the
+PyPI project `claude-drift` through trusted publishing from the `pypi` environment. No token is
+stored in the repository.
+
 ## License
 
 MIT
