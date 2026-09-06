@@ -152,3 +152,25 @@ def test_bonferroni_widens_transition_intervals() -> None:
     # with only one comparison tested, delta=6 over 60 cuts (noise never drifts) is
     # still real at alpha=0.05.
     assert t_single.real is True
+
+
+def test_last_non_error_replay_wins() -> None:
+    # `drift resume` appends new attempts without deleting old rows, so a cut can have
+    # more than one replay per role. An error row must never displace an earlier
+    # success, but a later success must replace an earlier error.
+    cuts = [cut(0)]
+    error_then_success = [
+        rep(0, "candidate", None, error="boom"),
+        rep(0, "candidate", BASH),
+        rep(0, "noise", BASH),
+    ]
+    s = compute(cuts, error_then_success)
+    assert s.cuts == 1 and s.errors == 0 and s.skipped == 0
+
+    success_then_error = [
+        rep(0, "candidate", BASH),
+        rep(0, "candidate", None, error="boom"),
+        rep(0, "noise", BASH),
+    ]
+    s = compute(cuts, success_then_error)
+    assert s.cuts == 1 and s.errors == 0 and s.skipped == 0

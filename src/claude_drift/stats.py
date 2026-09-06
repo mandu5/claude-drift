@@ -75,9 +75,17 @@ def _bootstrap(
 def _rows(
     cuts: list[CutPoint], replays: list[ReplayResult]
 ) -> tuple[list[_Row], int, int, bool]:
+    # Last non-error result per (cut_id, role) wins: `drift resume` appends new attempts
+    # without deleting old error rows, so a later success must replace an earlier error,
+    # but a later error (e.g. from re-running an already-successful role) must never
+    # replace an earlier success.
     by_cut: dict[str, dict[str, ReplayResult]] = {}
     for r in replays:
-        by_cut.setdefault(r.cut_id, {})[r.role] = r
+        slot = by_cut.setdefault(r.cut_id, {})
+        existing = slot.get(r.role)
+        if existing is not None and existing.error is None and r.error is not None:
+            continue
+        slot[r.role] = r
     noise_on = any(r.role == "noise" for r in replays)
     rows: list[_Row] = []
     errors = 0

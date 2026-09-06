@@ -9,7 +9,11 @@ import pytest
 from click.testing import CliRunner
 
 from claude_drift.cli import main, run_replay
-from claude_drift.store import latest_run
+from claude_drift.ingest import ingest, projects_root
+from claude_drift.models import ActionSignature, ReplayResult
+from claude_drift.sample import sample_cuts
+from claude_drift.stats import compute
+from claude_drift.store import latest_run, new_run
 
 
 def assistant_tool(name: str, inp: dict[str, object]) -> str:
@@ -309,3 +313,92 @@ def test_cli_replay_ambiguous_from(
     result = CliRunner().invoke(main, ["replay", "--from", "opus", "--to", "new", "--yes"])
     assert result.exit_code != 0
     assert "matches more than one" in result.output
+
+
+def test_resume_reruns_missing_and_errored_replays(
+    projects_dir: Path, drift_home: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A run whose noise replays all errored out (as would happen after hitting a session
+    limit mid-run) should have `resume` re-run only the noise role, leaving the already
+    -successful candidate rows untouched, and every cut should end up fully successful."""
+    import claude_drift.cli as cli
+
+    pretend_claude_installed(monkeypatch)
+    monkeypatch.setattr(cli, "SubprocessRunner", ScriptedRunner)
+
+    resolved_from = "claude-opus-5"
+    all_cuts = ingest(projects_root(), project=None)
+    cuts = sample_cuts(
+        [c for c in all_cuts if c.model == resolved_from], turns=10, seed=0, per_session=3
+    )
+    assert cuts  # fixtures provide replayable claude-opus-5 cuts
+
+    run = new_run()
+    run.write_cuts(cuts)
+    candidate_sig = ActionSignature("Read", "local-read", None, False)
+    manifest = {
+        "from": resolved_from,
+        "to": "new",
+        "turns": len(cuts),
+        "seed": 0,
+        "workers": 1,
+        "noise": True,
+        "timeout": 1.0,
+        "per_session": 3,
+        "claude_version": "test",
+        "started": "2026-01-01T00:00:00",
+        "finished": "2026-01-01T00:00:01",
+        "status": "aborted",
+        "completed": len(cuts) * 2,
+        "errors": len(cuts),
+    }
+    run.write_manifest(manifest)
+    for c in cuts:
+        run.append_replay(
+            ReplayResult(c.cut_id, "new", "candidate", candidate_sig, None, {}, None, 1)
+        )
+        run.append_replay(
+            ReplayResult(c.cut_id, resolved_from, "noise", None, None, {}, "session limit", 1)
+        )
+
+    result = CliRunner().invoke(main, ["resume", "--run", run.path.name, "--yes"])
+    assert result.exit_code == 0, result.output
+    assert "pending replays" in result.output
+
+    m = run.read_manifest()
+    assert m["status"] == "done"
+    assert len(m["resumes"]) == 1
+    assert m["resumes"][0]["pending"] == len(cuts)
+
+    replays = run.read_replays()
+    assert all(
+        r.error is None for r in replays if r.role == "candidate"
+    )  # untouched, never re-run
+    stats = compute(cuts, replays)
+    assert stats.cuts == len(cuts)
+    assert stats.errors == 0
+
+
+def test_resume_nothing_pending(
+    projects_dir: Path, drift_home: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import claude_drift.cli as cli
+
+    pretend_claude_installed(monkeypatch)
+    monkeypatch.setattr(cli, "SubprocessRunner", ScriptedRunner)
+    run = run_replay(
+        from_model="opus-5",
+        to_model="new",
+        turns=10,
+        workers=2,
+        noise=True,
+        project=None,
+        seed=0,
+        timeout=1.0,
+        runner=ScriptedRunner(),
+        echo=lambda s: None,
+    )
+    result = CliRunner().invoke(main, ["resume", "--run", run.path.name, "--yes"])
+    assert result.exit_code == 0, result.output
+    assert "nothing to resume: all replays succeeded" in result.output
+    assert "resumes" not in run.read_manifest()
