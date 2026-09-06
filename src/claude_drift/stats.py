@@ -66,9 +66,24 @@ def _bootstrap(
     n_boot: int,
     alpha: float = ALPHA,
 ) -> Interval:
+    """Clustered bootstrap: resample whole sessions, not individual turns.
+
+    Turns from one session share a repo, a task and a CLAUDE.md, so they are not
+    independent draws. Resampling turns treats every turn as its own evidence and
+    reports a band far narrower than the data supports.
+    """
     if not rows:
         return Interval(0.0, 0.0)
-    samples = [stat([rows[rng.randrange(len(rows))] for _ in rows]) for _ in range(n_boot)]
+    grouped: dict[str, list[_Row]] = {}
+    for r in rows:
+        grouped.setdefault(r.session, []).append(r)
+    clusters = list(grouped.values())
+    samples = []
+    for _ in range(n_boot):
+        drawn: list[_Row] = []
+        for _ in clusters:
+            drawn.extend(clusters[rng.randrange(len(clusters))])
+        samples.append(stat(drawn))
     return Interval(_percentile(samples, alpha / 2), _percentile(samples, 1 - alpha / 2))
 
 

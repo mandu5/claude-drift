@@ -78,7 +78,9 @@ def test_equal_noise_and_candidate_shift_is_not_real() -> None:
     replays += [rep(i, "noise", READ if i < 10 else BASH) for i in range(40)]
     s = compute(cuts, replays, seed=0)
     assert s.candidate_agreement == 0.75 and s.noise_agreement == 0.75
-    assert s.noise_band is not None and s.noise_band.low < 0.75 < s.noise_band.high
+    # The band is clustered by session and this fixture spreads the 10 disagreements
+    # evenly over all 5 sessions, so every resample of sessions lands on 0.75 exactly.
+    assert s.noise_band is not None and s.noise_band.low <= 0.75 <= s.noise_band.high
     t = s.transitions[0]
     assert t.delta == 0 and t.real is False
 
@@ -207,3 +209,36 @@ def test_stored_signature_is_kept_when_there_is_no_raw_tool_use() -> None:
     s = compute(cuts, replays)
     assert s.candidate_agreement == 0.0
     assert s.transitions[0].dst == "text"
+
+
+def test_bootstrap_resamples_sessions_not_rows() -> None:
+    # Two sessions of 10 turns each: session A always agrees with the record, session B
+    # never does. Resampling sessions draws AA, AB or BB, so the band must reach both
+    # 0.0 and 1.0. Resampling 20 rows independently would never produce either endpoint.
+    def two_session_cut(session: str, i: int) -> CutPoint:
+        return CutPoint(
+            f"{session}:{i}",
+            f"/p/{session}.jsonl",
+            session,
+            i,
+            "p",
+            RecordedAction("Bash", {"command": "ls"}),
+            "old",
+            "/c",
+            "v",
+        )
+
+    def two_session_rep(session: str, i: int, role: str, sig: ActionSignature) -> ReplayResult:
+        return ReplayResult(f"{session}:{i}", "old", role, sig, None, {}, None, 1)
+
+    cuts = [two_session_cut("a", i) for i in range(10)]
+    cuts += [two_session_cut("b", i) for i in range(10)]
+    replays = []
+    for i in range(10):
+        replays.append(two_session_rep("a", i, "candidate", BASH))
+        replays.append(two_session_rep("a", i, "noise", BASH))
+        replays.append(two_session_rep("b", i, "candidate", READ))
+        replays.append(two_session_rep("b", i, "noise", READ))
+    s = compute(cuts, replays, seed=0)
+    assert s.sessions == 2 and s.noise_agreement == 0.5
+    assert s.noise_band == Interval(0.0, 1.0)
