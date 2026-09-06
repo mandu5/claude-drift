@@ -1,6 +1,6 @@
 [project]
 name = "claude-drift"
-version = "0.1.0"
+version = "0.1.1"
 description = "Replay your own Claude Code sessions against a new model and see what actually changed."
 readme = "README.md"
 license = { text = "MIT" }
@@ -26,6 +26,7 @@ Issues = "https://github.com/mandu5/claude-drift/issues"
 
 [project.scripts]
 drift = "claude_drift.cli:main"
+claude-drift = "claude_drift.cli:main"
 
 [build-system]
 requires = ["hatchling"]

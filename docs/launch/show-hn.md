@@ -27,8 +27,7 @@ Sonnet sits inside the noise band: no detectable drift over 20 turns.
 No config, no API key; it uses your existing `claude` login.
 
 ```
-uvx claude-drift scan          # after the PyPI release
-uvx --from git+https://github.com/mandu5/claude-drift drift scan   # today
+uvx claude-drift scan
 ```
 
 ## Prepared first comment (limitations)

@@ -37,14 +37,12 @@ band the candidate sits inside the noise, so on these 20 turns there is no detec
 
 ## Install
 
-Not on PyPI yet. Run it straight from GitHub with uv:
-
 ```bash
-uvx --from git+https://github.com/mandu5/claude-drift drift scan
+uvx claude-drift scan            # run without installing
 ```
 
-or clone and `uv sync` (see Development). `uvx claude-drift` / `pip install claude-drift` will
-work once the first release is published.
+or `pip install claude-drift` / `uv tool install claude-drift`, which gives you the short `drift`
+command used in the examples below. Python 3.11+ and a logged-in `claude` CLI are required.
 
 ## Use
 
@@ -163,7 +161,7 @@ DRIFT_LIVE=1 uv run pytest tests/test_replay_live.py -s
 ### Releasing
 
 ```bash
-git tag v0.1.0 && git push --tags
+git tag v0.1.1 && git push --tags   # bump pyproject version first; the workflow checks it
 ```
 
 A `v*` tag runs `.github/workflows/publish.yml`, which builds the wheel and uploads it to the
