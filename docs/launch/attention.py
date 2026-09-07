@@ -31,7 +31,8 @@ print("== GitHub ==")
 r = gh(f"repos/{REPO}")
 if isinstance(r, dict):
     print(
-        f"stars {r['stargazers_count']}  forks {r['forks_count']}  watchers {r['subscribers_count']}  open issues {r['open_issues_count']}"
+        f"stars {r['stargazers_count']}  forks {r['forks_count']}  "
+        f"watchers {r['subscribers_count']}  open issues {r['open_issues_count']}"
     )
 for kind in ("views", "clones"):
     t = gh(f"repos/{REPO}/traffic/{kind}")
@@ -47,7 +48,8 @@ p = get("https://pypistats.org/api/packages/claude-drift/recent")
 if p and "data" in p:
     d = p["data"]
     print(
-        f"downloads: day {d.get('last_day')}  week {d.get('last_week')}  month {d.get('last_month')}"
+        f"downloads: day {d.get('last_day')}  week {d.get('last_week')}  "
+        f"month {d.get('last_month')}"
     )
 else:
     print("no data yet")
