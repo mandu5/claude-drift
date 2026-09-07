@@ -56,6 +56,9 @@ def scan(project: str | None) -> None:
     click.echo("\nby recorded tool:")
     for tool, n in Counter(c.recorded.tool for c in cuts).most_common():
         click.echo(f"  {tool:<28} {n:>5}")
+    click.echo("\nby recorded effort:")
+    for effort, n in Counter(c.effort or "unknown" for c in cuts).most_common():
+        click.echo(f"  {effort:<28} {n:>5}")
 
 
 TOKENS_PER_CUT_ESTIMATE = 100_000
@@ -130,6 +133,7 @@ def _execute(
     workers: int,
     timeout: float,
     echo: Callable[[str], None],
+    effort_match: bool = True,
 ) -> _Progress:
     """Replay each (cut, model, role) in `cuts_by_role`, one session per worker.
 
@@ -159,7 +163,15 @@ def _execute(
             if state.aborted:
                 return
             try:
-                result = replay_cut(cut, model, role, runner, timeout=timeout, attempt=attempt)
+                result = replay_cut(
+                    cut,
+                    model,
+                    role,
+                    runner,
+                    timeout=timeout,
+                    attempt=attempt,
+                    effort_match=effort_match,
+                )
             except BaseException:
                 # Stop other in-flight/queued batches from starting new cuts as soon
                 # as possible, before the pool shutdown below waits for them.
@@ -229,6 +241,7 @@ def run_replay(
     echo: Callable[[str], None],
     per_session: int = 3,
     self_replays: int = 1,
+    effort_match: bool = True,
 ) -> Run:
     all_cuts = ingest(projects_root(), project=project)
     if not all_cuts:
@@ -254,6 +267,7 @@ def run_replay(
         "timeout": timeout,
         "per_session": per_session,
         "self_replays": self_replays,
+        "effort_match": effort_match,
         "claude_version": claude_version(),
         "started": datetime.now().isoformat(),
         "status": "running",
@@ -264,7 +278,7 @@ def run_replay(
     if noise:
         items += [(c, resolved_from, "noise", a) for c in cuts for a in range(self_replays)]
 
-    _execute(run, items, manifest, runner, workers, timeout, echo)
+    _execute(run, items, manifest, runner, workers, timeout, echo, effort_match)
     return run
 
 
@@ -305,6 +319,12 @@ def run_replay(
     is_flag=True,
     help="Skip the old-model replay that measures the noise band.",
 )
+@click.option(
+    "--no-effort-match",
+    "no_effort_match",
+    is_flag=True,
+    help="Replay at the default effort instead of the effort recorded for each turn.",
+)
 @click.option("--project", type=click.Path(), default=None)
 @click.option("--seed", default=0, show_default=True, type=int)
 @click.option(
@@ -323,6 +343,7 @@ def replay(
     self_replays: int,
     workers: int,
     no_noise: bool,
+    no_effort_match: bool,
     project: str | None,
     seed: int,
     timeout: float,
@@ -340,6 +361,7 @@ def replay(
             "claude binary not found on PATH; install Claude Code and log in first"
         )
     noise = not no_noise
+    effort_match = not no_effort_match
     all_cuts = ingest(projects_root(), project=project)
     if not all_cuts:
         raise click.ClickException("no replayable cuts found; run `drift scan`")
@@ -373,6 +395,7 @@ def replay(
         echo=click.echo,
         per_session=per_session,
         self_replays=self_replays,
+        effort_match=effort_match,
     )
     m = run.read_manifest()
     click.echo(f"status: {m['status']}  completed: {m['completed']}  failed replays: {m['errors']}")
@@ -450,6 +473,7 @@ def resume(run_id: str | None, workers: int | None, yes: bool) -> None:
 
     resolved_workers = workers if workers is not None else int(manifest["workers"])
     timeout = float(manifest["timeout"])
+    effort_match = bool(manifest.get("effort_match", True))
 
     est = len(pending) * TOKENS_PER_CUT_ESTIMATE
     click.echo(f"pending replays: {len(pending)}  estimated input tokens: {est:,}")
@@ -461,7 +485,14 @@ def resume(run_id: str | None, workers: int | None, yes: bool) -> None:
     run.write_manifest(manifest)
 
     state = _execute(
-        run, pending, manifest, SubprocessRunner(), resolved_workers, timeout, click.echo
+        run,
+        pending,
+        manifest,
+        SubprocessRunner(),
+        resolved_workers,
+        timeout,
+        click.echo,
+        effort_match,
     )
     manifest.setdefault("resumes", []).append(
         {

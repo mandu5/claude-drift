@@ -21,6 +21,7 @@ class CutPoint:
     model: str
     cwd: str
     version: str
+    effort: str | None = None
 
 
 @dataclass(frozen=True)
@@ -67,6 +68,7 @@ def cut_from_dict(d: dict[str, Any]) -> CutPoint:
         model=d["model"],
         cwd=d["cwd"],
         version=d["version"],
+        effort=d.get("effort"),
     )
 
 

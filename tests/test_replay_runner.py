@@ -119,6 +119,28 @@ def test_replay_cut_builds_result_and_cleans_up(projects_dir: Path, drift_home: 
     assert leftovers == []
 
 
+def test_replay_cut_matches_effort_by_default(projects_dir: Path, drift_home: Path) -> None:
+    cut = cuts_from_session(projects_dir / "-fake-project" / "alpha.jsonl")[0]  # effort "high"
+    runner = FakeRunner(
+        [assistant([{"type": "text", "text": "ok"}]), ev("result", subtype="success")]
+    )
+    replay_cut(cut, "claude-sonnet-5", "candidate", runner)
+    argv, _cwd = runner.calls[0]
+    assert argv[argv.index("--effort") + 1] == "high"
+
+
+def test_replay_cut_omits_effort_when_effort_match_is_false(
+    projects_dir: Path, drift_home: Path
+) -> None:
+    cut = cuts_from_session(projects_dir / "-fake-project" / "alpha.jsonl")[0]  # effort "high"
+    runner = FakeRunner(
+        [assistant([{"type": "text", "text": "ok"}]), ev("result", subtype="success")]
+    )
+    replay_cut(cut, "claude-sonnet-5", "candidate", runner, effort_match=False)
+    argv, _cwd = runner.calls[0]
+    assert "--effort" not in argv
+
+
 def test_replay_cut_text_only_signature(projects_dir: Path, drift_home: Path) -> None:
     cut = cuts_from_session(projects_dir / "-fake-project" / "alpha.jsonl")[0]
     runner = FakeRunner(

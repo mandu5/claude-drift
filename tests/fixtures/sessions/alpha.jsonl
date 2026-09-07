@@ -1,9 +1,9 @@
 {"type":"user","sessionId":"alpha","cwd":"/CWD/","version":"2.1.261","message":{"role":"user","content":"list the repo"}}
 {"type":"assistant","sessionId":"alpha","cwd":"/CWD/","version":"2.1.261","message":{"model":"claude-opus-5","role":"assistant","content":[{"type":"text","text":"Sure."}]}}
-{"type":"assistant","sessionId":"alpha","cwd":"/CWD/","version":"2.1.261","message":{"model":"claude-opus-5","role":"assistant","content":[{"type":"tool_use","name":"Bash","input":{"command":"ls -la"}}]}}
+{"type":"assistant","sessionId":"alpha","cwd":"/CWD/","version":"2.1.261","effort":"high","message":{"model":"claude-opus-5","role":"assistant","content":[{"type":"tool_use","name":"Bash","input":{"command":"ls -la"}}]}}
 {"type":"user","sessionId":"alpha","cwd":"/CWD/","version":"2.1.261","message":{"role":"user","content":[{"type":"tool_result","content":"README.md"}]}}
 {"type":"assistant","sessionId":"alpha","cwd":"/CWD/","version":"2.1.261","message":{"model":"claude-opus-5","role":"assistant","content":[{"type":"tool_use","name":"Read","input":{"file_path":"/CWD/README.md"}}]}}
 {"type":"user","sessionId":"alpha","cwd":"/CWD/","version":"2.1.261","message":{"role":"user","content":[{"type":"tool_result","content":"# hi"}]}}
 {"type":"assistant","sessionId":"alpha","cwd":"/CWD/","version":"2.1.261","message":{"model":"claude-opus-5","role":"assistant","content":[{"type":"text","text":"Done."}]}}
 {"type":"user","sessionId":"alpha","cwd":"/CWD/","version":"2.1.261","message":{"role":"user","content":"now open src/app.py"}}
-{"type":"assistant","sessionId":"alpha","cwd":"/CWD/","version":"2.1.261","message":{"model":"claude-opus-5","role":"assistant","content":[{"type":"tool_use","name":"Read","input":{"file_path":"/CWD/src/app.py"}}]}}
+{"type":"assistant","sessionId":"alpha","cwd":"/CWD/","version":"2.1.261","effort":"max","message":{"model":"claude-opus-5","role":"assistant","content":[{"type":"tool_use","name":"Read","input":{"file_path":"/CWD/src/app.py"}}]}}

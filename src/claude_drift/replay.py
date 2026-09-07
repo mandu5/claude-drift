@@ -98,8 +98,10 @@ def temp_session(cut: CutPoint) -> Iterator[str]:
             pass
 
 
-def build_argv(cut: CutPoint, temp_id: str, model: str, settings: Path) -> list[str]:
-    return [
+def build_argv(
+    cut: CutPoint, temp_id: str, model: str, settings: Path, effort_match: bool = True
+) -> list[str]:
+    argv = [
         "claude",
         "-p",
         cut.prompt,
@@ -117,6 +119,9 @@ def build_argv(cut: CutPoint, temp_id: str, model: str, settings: Path) -> list[
         "--settings",
         str(settings),
     ]
+    if effort_match and cut.effort is not None:
+        argv += ["--effort", cut.effort]
+    return argv
 
 
 @dataclass
@@ -228,12 +233,13 @@ def replay_cut(
     runner: Runner,
     timeout: float = 180.0,
     attempt: int = 0,
+    effort_match: bool = True,
 ) -> ReplayResult:
     start = time.monotonic()
     settings = blocking_settings_path()
     try:
         with temp_session(cut) as temp_id:
-            argv = build_argv(cut, temp_id, model, settings)
+            argv = build_argv(cut, temp_id, model, settings, effort_match)
             with runner.stream(argv, cut.cwd, timeout) as lines:
                 turn = parse_stream(lines)
     except Exception as exc:  # noqa: BLE001 - any runner failure is recorded, never raised

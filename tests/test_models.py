@@ -28,6 +28,19 @@ def test_cut_roundtrip() -> None:
     assert cut_from_dict(to_dict(cut)) == cut
 
 
+def test_cut_roundtrip_with_effort() -> None:
+    from dataclasses import replace
+
+    cut = replace(make_cut(), effort="high")
+    assert cut_from_dict(to_dict(cut)) == cut
+
+
+def test_cut_from_dict_defaults_effort_to_none_for_old_cuts_jsonl() -> None:
+    d = to_dict(make_cut())
+    del d["effort"]
+    assert cut_from_dict(d).effort is None
+
+
 def test_replay_roundtrip_with_signature() -> None:
     r = ReplayResult(
         cut_id="s1:14",

@@ -25,7 +25,9 @@ def test_alpha_yields_two_cuts_after_human_prompts(projects_dir: Path, repo_dir:
     assert first.model == "claude-opus-5"
     assert first.cwd == str(repo_dir)
     assert first.version == "2.1.261"
+    assert first.effort == "high"
     assert second.recorded.tool == "Read"
+    assert second.effort == "max"
 
 
 def test_beta_skips_synthetic_sidechain_and_text_only(projects_dir: Path) -> None:
@@ -34,6 +36,7 @@ def test_beta_skips_synthetic_sidechain_and_text_only(projects_dir: Path) -> Non
     # "try again" -> sidechain tool_use ignored, then text only: skipped
     # "run tests" -> Bash pytest: kept
     assert [(c.line_index, c.recorded.tool) for c in cuts] == [(5, "Bash")]
+    assert cuts[0].effort is None
 
 
 def test_gamma_skipped_when_cwd_missing(projects_dir: Path) -> None:
@@ -52,3 +55,13 @@ def test_malformed_line_skips_session_not_process(projects_dir: Path) -> None:
     bad.write_text('{"type":"user"\nnot json\n')
     assert cuts_from_session(bad) == []
     assert len(ingest(projects_dir)) == 3
+
+
+def test_invalid_effort_value_is_ignored(projects_dir: Path, repo_dir: Path) -> None:
+    path = projects_dir / "-fake-project" / "alpha.jsonl"
+    text = path.read_text().replace('"effort":"high"', '"effort":"turbo"')
+    assert '"effort":"turbo"' in text  # replacement actually happened
+    path.write_text(text)
+    cuts = cuts_from_session(path)
+    first, _second = cuts
+    assert first.effort is None

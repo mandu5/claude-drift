@@ -9,6 +9,7 @@ from typing import Any
 from claude_drift.models import CutPoint, RecordedAction
 
 SYNTHETIC_MODEL = "<synthetic>"
+VALID_EFFORTS = {"low", "medium", "high", "xhigh", "max"}
 
 
 def projects_root() -> Path:
@@ -57,9 +58,28 @@ def _first_tool_use(entry: dict[str, Any]) -> tuple[str, dict[str, Any]] | None:
     return None
 
 
+def _effort_of(entry: dict[str, Any]) -> str | None:
+    val = entry.get("effort")
+    return val if isinstance(val, str) and val in VALID_EFFORTS else None
+
+
+def _nearest_preceding_effort(entries: list[dict[str, Any] | None], before: int) -> str | None:
+    """Nearest non-sidechain assistant entry before index `before` that carries a valid effort."""
+    for k in range(before - 1, -1, -1):
+        e = entries[k]
+        if e is None:
+            continue
+        if e.get("type") != "assistant" or e.get("isSidechain"):
+            continue
+        effort = _effort_of(e)
+        if effort is not None:
+            return effort
+    return None
+
+
 def _recorded_after(
     entries: list[dict[str, Any] | None], start: int
-) -> tuple[RecordedAction, str] | None:
+) -> tuple[RecordedAction, str, str | None] | None:
     """First non-sidechain assistant tool_use after `start`, before the next human prompt."""
     for j in range(start + 1, len(entries)):
         e = entries[j]
@@ -75,7 +95,10 @@ def _recorded_after(
             return None
         tu = _first_tool_use(e)
         if tu is not None:
-            return RecordedAction(tool=tu[0], input=tu[1]), model
+            effort = _effort_of(e)
+            if effort is None:
+                effort = _nearest_preceding_effort(entries, j)
+            return RecordedAction(tool=tu[0], input=tu[1]), model, effort
     return None
 
 
@@ -98,7 +121,7 @@ def cuts_from_session(
         found = _recorded_after(entries, i)
         if found is None:
             continue
-        recorded, model = found
+        recorded, model, effort = found
         cuts.append(
             CutPoint(
                 cut_id=f"{session_id}:{i}",
@@ -110,6 +133,7 @@ def cuts_from_session(
                 model=model,
                 cwd=cwd,
                 version=version,
+                effort=effort,
             )
         )
     return cuts

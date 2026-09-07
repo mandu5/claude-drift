@@ -69,6 +69,7 @@ Example output: see [docs/examples/first-report.md](docs/examples/first-report.m
 | `--self-replays N` | 1 | Old-model replays per cut. Above 1 the report also gives old-vs-old self-agreement, which separates the model's own sampling instability from replay-vs-interactive mismatch. Multiplies cost. Use 5 once to calibrate your setup, then go back to 1. |
 | `--workers N` | 4 | Replays in flight at once. Sessions are batched so one worker owns a session. |
 | `--no-noise` | off | Skip the old-model replay. Faster and half the cost, but no noise band and no verdict. |
+| `--no-effort-match` | off | Replay at the default effort instead of the effort recorded for each turn. |
 | `--project PATH` | all | Only replay sessions whose working directory is under `PATH`. Also on `drift scan`. |
 | `--seed N` | 0 | Seed for sampling and for the bootstrap, so a run is reproducible. |
 | `--timeout SECONDS` | 180 | Per-replay wall clock. A replay that exceeds it is killed and counted as failed. |
@@ -93,8 +94,9 @@ session copies are always removed; the run is marked `interrupted`.
    `tool_use` block and the process is killed there, before any tool can execute. As a second
    layer, a PreToolUse hook that blocks every tool is passed via `--settings`. That hook was
    never exercised in testing, because the stop always happens first. `--settings` merges rather
-   than replaces, so your own hooks and plugins still load during a replay. The temporary file
-   is deleted afterwards, and the original session file is never written to.
+   than replaces, so your own hooks and plugins still load during a replay. Each turn is replayed
+   at the effort level recorded for it (`--effort`), unless `--no-effort-match`. The temporary
+   file is deleted afterwards, and the original session file is never written to.
 4. **classify** — normalises each action to `tool/target` (e.g. `Bash/local-read`, `Read/local-read`,
    `Agent/delegate`, `Bash/remote`).
 5. **stats** — agreement with the recorded action for the new model and for the old model; a
@@ -131,9 +133,9 @@ expensive; the default of 1 costs about a third of this for the same number of t
 - Results describe *next-action* drift, not end-to-end task outcomes.
 - Replays inherit your local plugins and hooks, so reports are not directly comparable across
   machines.
-- The self-replay control measures instability under `claude -p`; it does not reproduce the
-  interactive session's thinking budget or the plugin state at recording time, so old-vs-record
-  agreement is a lower bound.
+- The self-replay control measures instability under `claude -p`; effort is matched, but the
+  interactive session's thinking budget beyond effort and the plugin state at recording time are
+  not reproduced, so old-vs-record agreement is a lower bound.
 
 ## Related
 

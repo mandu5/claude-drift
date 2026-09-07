@@ -71,3 +71,27 @@ def test_build_argv(projects_dir: Path, drift_home: Path) -> None:
     assert "--verbose" in argv
     assert argv[argv.index("--settings") + 1] == "/s.json"
     assert "--bare" not in argv and "--disallowedTools" not in argv
+
+
+def test_build_argv_matches_recorded_effort_by_default(
+    projects_dir: Path, drift_home: Path
+) -> None:
+    cut = alpha_cuts(projects_dir)[0]  # effort "high"
+    argv = build_argv(cut, "tmp-id", "claude-sonnet-5", Path("/s.json"))
+    assert argv[argv.index("--effort") + 1] == "high"
+
+
+def test_build_argv_omits_effort_when_effort_match_is_false(
+    projects_dir: Path, drift_home: Path
+) -> None:
+    cut = alpha_cuts(projects_dir)[0]  # effort "high"
+    argv = build_argv(cut, "tmp-id", "claude-sonnet-5", Path("/s.json"), effort_match=False)
+    assert "--effort" not in argv
+
+
+def test_build_argv_omits_effort_when_cut_has_none(projects_dir: Path, drift_home: Path) -> None:
+    from dataclasses import replace
+
+    cut = replace(alpha_cuts(projects_dir)[1], effort=None)
+    argv = build_argv(cut, "tmp-id", "claude-sonnet-5", Path("/s.json"))
+    assert "--effort" not in argv

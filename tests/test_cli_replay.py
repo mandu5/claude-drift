@@ -75,6 +75,7 @@ def test_run_replay_writes_run_with_noise(projects_dir: Path, drift_home: Path) 
     manifest = run.read_manifest()
     assert manifest["status"] == "done"
     assert isinstance(manifest["claude_version"], str) and manifest["claude_version"]
+    assert manifest["effort_match"] is True
     cuts = run.read_cuts()
     assert len(cuts) == 3
     replays = run.read_replays()
@@ -137,6 +138,23 @@ def test_cli_replay_dry_estimate_and_yes(projects_dir: Path, drift_home: Path, m
     assert "failed replays: 0" in result.output
     lr = latest_run()
     assert lr is not None and len(lr.read_cuts()) == 2
+
+
+def test_cli_replay_no_effort_match_flag(
+    projects_dir: Path, drift_home: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import claude_drift.cli as cli
+
+    pretend_claude_installed(monkeypatch)
+    monkeypatch.setattr(cli, "SubprocessRunner", ScriptedRunner)
+    result = CliRunner().invoke(
+        main,
+        ["replay", "--from", "opus-5", "--to", "new", "--turns", "2", "--no-effort-match", "--yes"],
+    )
+    assert result.exit_code == 0, result.output
+    lr = latest_run()
+    assert lr is not None
+    assert lr.read_manifest()["effort_match"] is False
 
 
 def test_cli_replay_turns_default_is_30() -> None:

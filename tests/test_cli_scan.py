@@ -15,6 +15,8 @@ def test_scan_lists_sessions_models_and_cut_counts(projects_dir: Path, repo_dir:
     assert "replayable cuts: 3" in out
     assert "claude-opus-5" in out and "3" in out
     assert "Bash" in out and "Read" in out
+    assert "by recorded effort" in out
+    assert "high" in out and "max" in out and "unknown" in out  # beta's cut has no effort
 
 
 def test_scan_project_filter_no_matches(projects_dir: Path) -> None:
