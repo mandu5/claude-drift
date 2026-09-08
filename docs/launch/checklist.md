@@ -3,11 +3,11 @@
 ## Pre-launch gates (all must be green before any channel)
 
 - [x] PyPI release published (0.1.1); `uvx claude-drift scan` verified.
-- [ ] `docs/demo.gif` renders on the GitHub README page (check on github.com, not locally).
-- [ ] README numbers match `docs/examples/first-report.md` and the stored run
+- [x] `docs/demo.gif` renders on the GitHub README page (check on github.com, not locally).
+- [x] README numbers match `docs/examples/first-report.md` and the stored run
       (`drift report --run 20260906-095910`).
 - [x] CI green on `main`: `pytest -q`, `ruff check .`, `mypy`.
-- [ ] Repository description, topics, and LICENSE set; issues enabled.
+- [x] Repository description, topics, and LICENSE set; issues enabled.
 - [ ] A second person has run `drift scan` on their own machine without hitting an error.
 
 ## Channels, in order
