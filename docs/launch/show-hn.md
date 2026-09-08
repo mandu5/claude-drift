@@ -42,9 +42,12 @@ Author here. What this does not do, stated plainly:
   old-vs-record is a lower bound, not a clean measurement.
 - **Your hooks and plugins load during a replay.** `--settings` merges rather than replaces, so
   numbers are not directly comparable across machines.
-- **It costs real tokens.** The README run was 120 replays, about 39M input tokens (mostly
-  cache reads and writes) and 20 minutes at 4 workers. `--self-replays 5` is what makes it
-  expensive; the default is 1.
+- **It costs real tokens.** The README run was 120 replays (135 attempts after retries), about
+  39M input tokens — almost all of it cache writes and reads — and 59 minutes of replay time,
+  roughly 15-20 minutes of wall clock at 4 workers. It also exhausted my Max session window
+  partway through, so the run you see finished only because `drift resume` picked it up after
+  the window reset. `--self-replays 5` is what makes it that expensive; the default is 1, and
+  the default 30 turns with `--self-replays 1` is about a tenth of the cost.
 - **Claude only**, because it reads Claude Code session logs. The method is not Claude-specific,
   the log parser is.
 - **Small samples.** The bootstrap resamples sessions, not turns, so bands over 5-6 sessions are
