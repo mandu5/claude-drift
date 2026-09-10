@@ -9,6 +9,8 @@
 - [x] CI green on `main`: `pytest -q`, `ruff check .`, `mypy`.
 - [x] Repository description, topics, and LICENSE set; issues enabled.
 - [ ] A second person has run `drift scan` on their own machine without hitting an error.
+      Ask text ready in `smoke-test-request.md`; `scan` makes no model calls, so it costs the
+      tester nothing.
 
 ## Channels, in order
 
