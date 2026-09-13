@@ -46,6 +46,8 @@ As a Claude Code plugin — `/drift scan` is free and needs nothing configured:
 /drift replay --from opus-5 --to sonnet-5     # prints the token estimate, asks, then runs
 ```
 
+or, for Claude Code and other agents via the skills CLI, `npx skills add mandu5/claude-drift`.
+
 Or as a CLI:
 
 ```bash
