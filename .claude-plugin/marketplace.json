@@ -1,0 +1,15 @@
+{
+  "name": "claude-drift",
+  "metadata": {
+    "description": "Replay your own Claude Code sessions against a new model and see what actually changed — with a same-model control so noise is not reported as drift."
+  },
+  "owner": {
+    "name": "Youngmin Ko"
+  },
+  "plugins": [
+    {
+      "name": "claude-drift",
+      "source": "./"
+    }
+  ]
+}

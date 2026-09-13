@@ -37,12 +37,24 @@ band the candidate sits inside the noise, so on these 20 turns there is no detec
 
 ## Install
 
+As a Claude Code plugin — `/drift scan` is free and needs nothing configured:
+
+```
+/plugin marketplace add mandu5/claude-drift
+/plugin install claude-drift@claude-drift
+/drift scan                                   # what is replayable here; no model calls
+/drift replay --from opus-5 --to sonnet-5     # prints the token estimate, asks, then runs
+```
+
+Or as a CLI:
+
 ```bash
 uvx claude-drift scan            # run without installing
 ```
 
 or `pip install claude-drift` / `uv tool install claude-drift`, which gives you the short `drift`
 command used in the examples below. Python 3.11+ and a logged-in `claude` CLI are required.
+Either way it uses your existing `claude` login; there is no API key to set.
 
 ## Use
 
