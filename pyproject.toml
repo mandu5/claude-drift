@@ -1,6 +1,6 @@
 [project]
 name = "claude-drift"
-version = "0.2.0"
+version = "0.2.1"
 description = "Replay your own Claude Code sessions against a new model and see what actually changed."
 readme = "README.md"
 license = { text = "MIT" }

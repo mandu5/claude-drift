@@ -1,7 +1,7 @@
 {
   "name": "claude-drift",
   "description": "Measure whether a new model actually behaves differently on your own Claude Code sessions. /drift scan reads the session logs already on disk and costs nothing; /drift replay re-runs sampled turns with the new model and with the old one, so the report separates real drift from replay noise. Ships a same-model control because a raw 'the model changed' number mostly measures the replay setup.",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "author": {
     "name": "Youngmin Ko",
     "url": "https://github.com/mandu5"
