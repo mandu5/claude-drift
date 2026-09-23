@@ -86,7 +86,7 @@ Lead with the verdict line and the three agreement numbers, in this order:
 1. **old-vs-old self-agreement** (if `--self-replays` > 1) — how stable the old model is with
    itself. This is the ceiling.
 2. **old-vs-record agreement** — how much of the gap is the replay setup (`-p` mode, missing
-   plugin state, no interactive thinking budget). This is the floor.
+   plugin state). This is the floor.
 3. **new-vs-record agreement** and whether it sits inside the noise band.
 
 Then the REAL table: transitions whose bootstrap interval (over sessions, Bonferroni-corrected)
