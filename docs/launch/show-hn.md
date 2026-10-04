@@ -2,9 +2,9 @@
 
 ## Title candidates (pick one)
 
-1. Show HN: Claude-drift – my agent matches its own session log 35% of the time
+1. Show HN: Claude-drift: my agent matches its own session log 35% of the time
 2. Show HN: My coding agent reproduces itself 80% of the time, its own log 35%
-3. Show HN: Claude-drift – find the real model drift in your own agent logs
+3. Show HN: Claude-drift: find the real model drift in your own agent logs
 
 ## Body
 
@@ -38,12 +38,12 @@ Author here. What this does not do, stated plainly:
   eventually succeeded. Turns that follow a tool result are skipped in v1.
 - **The `-p` regime is not your session.** Replays run headless, so the thinking budget and the
   plugin state differ from the interactive run that produced the log. That is exactly why
-  old-vs-record agreement is low, and why the self-replay control exists — but it also means
+  old-vs-record agreement is low, and why the self-replay control exists, but it also means
   old-vs-record is a lower bound, not a clean measurement.
 - **Your hooks and plugins load during a replay.** `--settings` merges rather than replaces, so
   numbers are not directly comparable across machines.
 - **It costs real tokens.** The README run was 120 replays (135 attempts after retries), about
-  39M input tokens — almost all of it cache writes and reads — and 59 minutes of replay time,
+  39M input tokens, almost all of it cache writes and reads, and 59 minutes of replay time,
   roughly 15-20 minutes of wall clock at 4 workers. It also exhausted my Max session window
   partway through, so the run you see finished only because `drift resume` picked it up after
   the window reset. `--self-replays 5` is what makes it that expensive; the default is 1, and

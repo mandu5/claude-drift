@@ -9,7 +9,7 @@ What I need back, in every case:
 - OS and chip (e.g. macOS 15 / M2, Ubuntu 24.04 / x86)
 - `python3 --version`
 - whether they have ever used Claude Code on that machine (if not, the count will be 0 and
-  that is still a useful result — it should say 0, not crash)
+  that is still a useful result, it should say 0, not crash)
 
 ---
 
@@ -33,7 +33,7 @@ Python 3.11 이상 필요합니다.)
 - 출력은 개수 통계뿐입니다 (세션 몇 개, 모델별/도구별 건수). 대화 내용은 안 찍힙니다.
 
 **보내주실 것:** 출력 전체를 그대로 복붙 (에러면 에러 전체), 그리고 OS/칩이랑
-`python3 --version` 결과요. Claude Code를 안 써보셨어도 괜찮습니다 — 그 경우 0으로
+`python3 --version` 결과요. Claude Code를 안 써보셨어도 괜찮습니다. 그 경우 0으로
 나와야 정상이고, 대신 죽어버리면 그게 제가 찾는 버그입니다.
 
 출력에 경로나 프로젝트 개수가 신경 쓰이시면 그 줄은 지우고 나머지만 주셔도 됩니다.
@@ -43,7 +43,7 @@ Python 3.11 이상 필요합니다.)
 
 ## English, for a DM or a dev channel
 
-Quick favour — takes about a minute, costs nothing.
+Quick favour: takes about a minute, costs nothing.
 
 I'm about to open-source a small CLI and it has only ever run on my machine. I need one
 person to confirm it doesn't blow up on a different setup.
@@ -55,14 +55,14 @@ uvx claude-drift scan
 (No `uv`? `pipx run claude-drift scan`, or `pip install claude-drift && drift scan`.
 Needs Python 3.11+.)
 
-Why it's a safe thing to run: it makes **no model calls** — no tokens, no API key, no login.
+Why it's a safe thing to run: it makes **no model calls**, no tokens, no API key, no login.
 It only reads the local `~/.claude/projects` folder, writes nothing, sends nothing. The output
 is counts only (how many sessions, broken down by recorded model and tool), never the contents
 of your conversations.
 
 What I need back: the whole output pasted as-is, or the whole error if it fails, plus your
 OS/chip and `python3 --version`. If you've never used Claude Code on that machine, that's still
-a useful run — it should report 0 and exit cleanly, and if it crashes instead, that's the bug
+a useful run. It should report 0 and exit cleanly, and if it crashes instead, that's the bug
 I'm looking for.
 
 Feel free to strip the path line if you'd rather not share it.
@@ -82,5 +82,5 @@ by recorded model:
 ...
 ```
 
-Anything else — a traceback, a `command not found`, a hang, an empty projects root on a machine
-that does use Claude Code — is a finding. File it as an issue the same day.
+Anything else: a traceback, a `command not found`, a hang, an empty projects root on a machine
+that does use Claude Code is a finding. File it as an issue the same day.

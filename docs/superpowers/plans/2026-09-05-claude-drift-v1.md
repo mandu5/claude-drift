@@ -1673,7 +1673,7 @@ git commit -m "Parse stream-json and run claude replays with kill-on-first-tool-
 
 ---
 
-### Task 8: Live probe (DRIFT_LIVE=1) — hooks override and cache reuse
+### Task 8: Live probe (DRIFT_LIVE=1): hooks override and cache reuse
 
 **Files:**
 - Create: `tests/test_replay_live.py`

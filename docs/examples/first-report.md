@@ -41,7 +41,7 @@ wait for the window.
 
 Reading it: the old model reproduces its own next action across five draws 80% of the time (band
 63%-88%), but agrees with the action it actually recorded in the interactive session only 35% of the
-time. That 45-point gap is the replay regime, not model instability — `claude -p` does not reproduce
+time. That 45-point gap is the replay regime, not model instability: `claude -p` does not reproduce
 the interactive session's thinking budget or the plugin state at recording time. The candidate sits
 at 25% against a noise band of 14%-58%, which is inside the band, so there is no detectable drift at
 the `tool/target` level, and none of the 14 transitions clears the Bonferroni-corrected threshold.

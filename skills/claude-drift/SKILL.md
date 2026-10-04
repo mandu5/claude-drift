@@ -12,8 +12,8 @@ Claude Code already writes every session to `~/.claude/projects/` as JSONL. This
 those logs, cuts them at the turns where the model chose its next action, replays those turns
 with a candidate model, and compares. The part that makes the number honest: it replays the
 **old** model too, so the report has a noise band. On the author's sessions the old model
-reproduced its own recorded action only 35% of the time but agreed with itself 80% of the time —
-a raw "the new model disagrees 75%" number is mostly the replay setup, not the model.
+reproduced its own recorded action only 35% of the time but agreed with itself 80% of the time.
+A raw "the new model disagrees 75%" number is mostly the replay setup, not the model.
 
 Runs the `drift` CLI. If `drift --version` fails: `pip install claude-drift` or `uvx claude-drift`.
 Uses the user's existing `claude` login. No API key.
@@ -31,7 +31,7 @@ Uses the user's existing `claude` login. No API key.
 
 ## Subcommands
 
-### `scan` (default — free)
+### `scan` (default: free)
 
 ```
 drift scan
@@ -43,7 +43,7 @@ it as-is, then say what a replay would compare: the recorded model with the most
 natural `--from`; ask the user which model they want as `--to`.
 
 If the cut count is 0, say so plainly: either Claude Code has not been used on this machine, or
-the logs live somewhere else — `CLAUDE_DRIFT_PROJECTS_DIR` overrides the projects root, and
+the logs live somewhere else: `CLAUDE_DRIFT_PROJECTS_DIR` overrides the projects root, and
 `--project PATH` restricts to sessions whose cwd is under a path. Do not guess.
 
 ### `replay --from <old> --to <new>`
@@ -83,14 +83,14 @@ Re-renders the markdown report from stored results. Free.
 
 Lead with the verdict line and the three agreement numbers, in this order:
 
-1. **old-vs-old self-agreement** (if `--self-replays` > 1) — how stable the old model is with
+1. **old-vs-old self-agreement** (if `--self-replays` > 1): how stable the old model is with
    itself. This is the ceiling.
-2. **old-vs-record agreement** — how much of the gap is the replay setup (`-p` mode, missing
+2. **old-vs-record agreement**: how much of the gap is the replay setup (`-p` mode, missing
    plugin state). This is the floor.
 3. **new-vs-record agreement** and whether it sits inside the noise band.
 
 Then the REAL table: transitions whose bootstrap interval (over sessions, Bonferroni-corrected)
-excludes zero. If it is empty, say "no detectable drift over N turns" — not "no drift". Small
+excludes zero. If it is empty, say "no detectable drift over N turns", not "no drift". Small
 samples give wide bands; wide bands are honest, and they mean small drifts will not clear the
 threshold. Offer more turns, not a softer threshold.
 

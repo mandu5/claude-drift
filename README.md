@@ -2,7 +2,7 @@
 
 Replay your own Claude Code sessions against a new model and see what actually changed. Replaying
 Opus 5 against itself, it reproduced its own next action 80% of the time but matched the action in
-the recorded session only 35% of the time — so a raw "the model changed" number is mostly measuring
+the recorded session only 35% of the time. So a raw "the model changed" number is mostly measuring
 your replay setup, and you need the same-model control to tell drift from noise.
 
 ![drift demo](docs/demo.gif)
@@ -31,13 +31,13 @@ agreement by level: tool 30% / target 25% / full 25%
 
 Read naively, the candidate picked a different next action than the record on 75% of turns, which
 sounds like a large behaviour change. But the old model disagreed with its own recorded action on
-65% of turns, and disagreed with itself across five draws on only 20% — most of that gap is the
+65% of turns, and disagreed with itself across five draws on only 20%. Most of that gap is the
 replay regime (`claude -p`, hooks and plugin state, thinking budget), not the model. Against that
 band the candidate sits inside the noise, so on these 20 turns there is no detectable drift.
 
 ## Install
 
-As a Claude Code plugin — `/drift scan` is free and needs nothing configured:
+As a Claude Code plugin, `/drift scan` is free and needs nothing configured:
 
 ```
 /plugin marketplace add mandu5/claude-drift
@@ -100,9 +100,9 @@ session copies are always removed; the run is marked `interrupted`.
 
 ## How it works
 
-1. **ingest** — finds human prompts in your session logs that were followed by a tool call.
-2. **sample** — picks up to 30 turns, stratified by tool, at most 3 per session, seeded.
-3. **replay** — writes a truncated copy of the session next to the original under a temporary id
+1. **ingest**: finds human prompts in your session logs that were followed by a tool call.
+2. **sample**: picks up to 30 turns, stratified by tool, at most 3 per session, seeded.
+3. **replay**: writes a truncated copy of the session next to the original under a temporary id
    and runs `claude -p --resume <id> --fork-session --model <new> --max-turns 1`. The primary
    guarantee that nothing runs is the stop itself: the stream is read only up to the first
    `tool_use` block and the process is killed there, before any tool can execute. As a second
@@ -111,16 +111,16 @@ session copies are always removed; the run is marked `interrupted`.
    than replaces, so your own hooks and plugins still load during a replay. Each turn is replayed
    at the effort level recorded for it (`--effort`), unless `--no-effort-match`. The temporary
    file is deleted afterwards, and the original session file is never written to.
-4. **classify** — normalises each action to `tool/target` (e.g. `Bash/local-read`, `Read/local-read`,
+4. **classify**: normalises each action to `tool/target` (e.g. `Bash/local-read`, `Read/local-read`,
    `Agent/delegate`, `Bash/remote`).
-5. **stats** — agreement with the recorded action for the new model and for the old model; a
+5. **stats**: agreement with the recorded action for the new model and for the old model; a
    bootstrap 95% band of old-vs-record agreement is the noise floor. The bootstrap resamples
    sessions, not turns, because turns from one session are not independent. Transitions whose
    new-minus-old count has a bootstrap interval excluding zero are reported as REAL, with the
    interval Bonferroni-corrected over the number of transitions tested. Transitions are
    enumerated from what the new model did differently, so a cut where only the old model drifted
    away from the record is not listed in v1.
-6. **report** — text or markdown.
+6. **report**: text or markdown.
 
 ## Cost
 
@@ -153,8 +153,8 @@ expensive; the default of 1 costs about a third of this for the same number of t
 
 ## Related
 
-- [delta-hq/cc-canary](https://github.com/delta-hq/cc-canary) — descriptive statistics over Claude Code session logs; it never calls a model.
-- [sshh12/agent-pr-replay](https://github.com/sshh12/agent-pr-replay) — end-to-end re-execution of agent tasks, without teacher forcing and without a same-model control.
+- [delta-hq/cc-canary](https://github.com/delta-hq/cc-canary): descriptive statistics over Claude Code session logs; it never calls a model.
+- [sshh12/agent-pr-replay](https://github.com/sshh12/agent-pr-replay): end-to-end re-execution of agent tasks, without teacher forcing and without a same-model control.
 
 As far as we know, `claude-drift` is the only tool that replays the old model against itself to
 separate drift from noise.
